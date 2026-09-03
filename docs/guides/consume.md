@@ -19,6 +19,8 @@ make cluster.aro-virt.bootstrap
 
 Destroy reverse: `make cluster.my-cluster.destroy` here (cleanup then terraform), then installer destroy.
 
+GitOps: this overlay binds `cluster-admin` to `openshift-gitops-argocd-application-controller` (the installer keeps the default least-privilege GitOps ClusterRole). The `trident-from-metadata` Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`.
+
 ## In-tree module
 
 ```hcl

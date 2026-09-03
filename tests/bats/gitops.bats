@@ -17,6 +17,11 @@ setup() {
   [[ "$output" == *"source: redhat-operators"* ]]
   [[ "$output" == *"kind: Application"* ]]
   [[ "$output" == *"name: rwx-storage"* ]]
+  [[ "$output" == *"name: rwx-storage-gitops-controller"* ]]
+  [[ "$output" == *"name: cluster-admin"* ]]
+  [[ "$output" == *"name: trident-from-metadata"* ]]
+  [[ "$output" == *"tridentorchestrators"* ]]
+  [[ "$output" == *"customresourcedefinitions"* ]]
 }
 
 @test "cleanup is idempotent when trident CRDs are absent" {
