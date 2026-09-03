@@ -13,6 +13,8 @@ setup() {
   [[ "$output" == *"name: trident-operator"* ]]
   [[ "$output" == *"source: certified-operators"* ]]
   [[ "$output" == *"name: anf-virt"* ]]
+  [[ "$output" == *"name: kubevirt-hyperconverged"* ]]
+  [[ "$output" == *"source: redhat-operators"* ]]
   [[ "$output" == *"kind: Application"* ]]
   [[ "$output" == *"name: rwx-storage"* ]]
 }

@@ -4,7 +4,7 @@ Instructions for AI agents working in this repository.
 
 ## What this repo is
 
-Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI), with OpenShift Virtualization as a later slice. Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, and a Trident identity. GitOps installs Trident. A standalone cleanup script drains Trident/ANF volumes that Terraform does not own.
+Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI) and **OpenShift Virtualization**. Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, and a Trident identity. GitOps installs Trident and the kubevirt-hyperconverged operator. A standalone cleanup script drains Trident/ANF volumes that Terraform does not own.
 
 This is **not** an OpenShift cluster installer. The cluster lives in the sibling **ARO HCP** pattern: [`rh-mobb/validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp). Do not create an HCP cluster here. Do not add AWS/GCP providers beyond empty module stubs until those slices exist.
 
@@ -12,7 +12,7 @@ This is **not** an OpenShift cluster installer. The cluster lives in the sibling
 
 | | ARO HCP (`validated-pattern-aro-hcp`) | This repo |
 |--|--------------------------------------|-----------|
-| Role | Cluster + GitOps baseline (ESO, OpenShift GitOps) | ANF + Trident (+ later CNV) |
+| Role | Cluster + GitOps baseline (ESO, OpenShift GitOps) | ANF + Trident + OpenShift Virtualization |
 | Canonical consume | `make cluster.<name>.apply` then bootstrap | Second IaC run: slim `terraform/` root |
 | In-tree consume | N/A (this module is not called from the installer) | Deployer may `module` `git::…//modules/azure?ref=<tag>` in *their* root |
 | Local co-dev | This checkout | Gitignored `references/validated-pattern-openshift-virt` inside the installer, **or** a sibling directory next to it |
@@ -57,7 +57,7 @@ When sources disagree:
 | `modules/gcp/` | Stub: Google Cloud NetApp Volumes (not implemented) |
 | `terraform/` | Thin root: providers, backend, compose `module.azure` |
 | `clusters/<name>/` | Per-attachment `terraform.tfvars` + state |
-| `gitops/` | Trident operator, backend Job, StorageClass |
+| `gitops/` | Trident operator, backend Job, StorageClass; OpenShift Virtualization (`openshift-cnv`) |
 | `scripts/` | `trident-cleanup.sh` (standalone), bootstrap |
 | `docs/` | Operator guides (MkDocs): prerequisites, architecture, consume modes |
 | `AGENTS.md` | This file — agents read it first |
@@ -68,17 +68,18 @@ When sources disagree:
 
 ```bash
 # installer (sibling checkout)
-make cluster.my-cluster.apply
-make cluster.my-cluster.kubeconfig
-make cluster.my-cluster.external-auth
-make cluster.my-cluster.bootstrap
-make cluster.my-cluster.platform
+make cluster.aro-virt.apply
+make cluster.aro-virt.kubeconfig
+make cluster.aro-virt.external-auth
+make cluster.aro-virt.bootstrap
+make cluster.aro-virt.virt-pool            # Azure Boost D8s_v6, 8+ cores
+make cluster.aro-virt.platform
 
 # this repo
-cp -r clusters/azure clusters/my-cluster   # ARO_HCP_ROOT or platform_json in tfvars
-make cluster.my-cluster.apply              # ANF subnet + account + pool + identity
-make cluster.my-cluster.bootstrap          # Argo Application → gitops/ (Trident)
-make cluster.my-cluster.destroy            # cleanup script, then terraform destroy
+ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp ARO_HCP_PROFILE=aro-virt \
+  make cluster.aro-virt.apply              # ANF subnet + account + pool + identity
+make cluster.aro-virt.bootstrap            # Argo Application → gitops/ (Trident + CNV)
+make cluster.aro-virt.destroy              # cleanup script, then terraform destroy
 ```
 
 In-tree: caller adds `module "netapp" { source = "git::https://github.com/rh-mobb/validated-pattern-openshift-virt.git//modules/azure?ref=<tag>" }`. They still need GitOps + cleanup. Pin `ref` to a tag.
@@ -101,8 +102,7 @@ Use this when the user asks to apply, verify, or destroy real ANF/Trident. `make
 ### After apply
 
 - Capacity pool exists; delegated subnet is `Microsoft.NetApp/volumes`.
-- Continue with bootstrap. Storage-done signal: PVC on `anf-virt` binds RWX.
-- Do not install CNV in the storage slice (#17 in the installer).
+- Continue with bootstrap. Storage-done signal: PVC on `anf-virt` binds RWX. Virt-done signal: `HyperConverged` Available and StorageProfile `anf-virt` is RWX Filesystem.
 
 ### Destroy
 
@@ -115,7 +115,7 @@ Use this when the user asks to apply, verify, or destroy real ANF/Trident. `make
 
 - `terraform apply` / `destroy` outside Make (skips `-var-file`).
 - Destroy the installer cluster while this stack still owns a delegated subnet or ANF volumes.
-- Mix CNV / virt node pool into a storage-only ask.
+- Mix a virt **node pool** (installer extra pool) into a storage-only ask. CNV GitOps lives here; extra workers stay in the installer.
 
 ## Documentation
 

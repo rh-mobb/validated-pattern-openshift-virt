@@ -1,0 +1,44 @@
+# After CDI creates StorageProfile anf-virt, set RWX Filesystem so VM disks
+# can live-migrate. See Microsoft ANF + OpenShift Virtualization on ARO.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cnv-storageprofile
+  namespace: openshift-cnv
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: cnv-storageprofile
+      containers:
+        - name: patch
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              wait_for() {
+                local desc="$1"; shift
+                local i
+                for i in $(seq 1 180); do
+                  if "$@" >/dev/null 2>&1; then return 0; fi
+                  sleep 10
+                done
+                echo "timed out waiting for ${desc}" >&2
+                exit 1
+              }
+              wait_for "HyperConverged CRD" oc get crd hyperconvergeds.hco.kubevirt.io
+              wait_for "HyperConverged Available" oc wait -n openshift-cnv hyperconverged/kubevirt-hyperconverged --for=condition=Available --timeout=1s
+              wait_for "StorageProfile CRD" oc get crd storageprofiles.cdi.kubevirt.io
+              wait_for "StorageProfile anf-virt" oc get storageprofile anf-virt
+              oc patch storageprofile anf-virt --type=json -p='[{"op":"replace","path":"/spec/claimPropertySets","value":[{"accessModes":["ReadWriteMany"],"volumeMode":"Filesystem"}]}]'
+              echo "patched storageprofile/anf-virt claimPropertySets RWX Filesystem"

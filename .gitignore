@@ -12,6 +12,7 @@ override.tf.json
 # Operator copies (committed example is un-ignored)
 *.tfvars
 !clusters/azure/terraform.tfvars
+!clusters/aro-virt/terraform.tfvars
 
 # Per-cluster operator artifacts
 clusters/*/infrastructure.tfstate*
