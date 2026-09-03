@@ -11,10 +11,10 @@ make cluster.my-cluster.bootstrap
 make cluster.my-cluster.platform
 
 # this repo
-cp -r clusters/azure clusters/my-cluster
+cp -r clusters/aro-virt clusters/my-cluster
 # set platform_json in terraform.tfvars, or:
-ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp make cluster.my-cluster.apply
-make cluster.my-cluster.bootstrap
+ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.apply
+make cluster.aro-virt.bootstrap
 ```
 
 Destroy reverse: `make cluster.my-cluster.destroy` here (cleanup then terraform), then installer destroy.
@@ -34,4 +34,4 @@ module "netapp" {
 }
 ```
 
-Pin `ref` to a tag. Still install sibling `gitops/` (Argo Application) and run `trident-cleanup.sh` before destroying the module. The ARO HCP installer root does **not** call this module.
+Pin `ref` to a tag. Still install sibling `gitops/` (Argo Application: Trident + OpenShift Virtualization) and run `trident-cleanup.sh` before destroying the module. The ARO HCP installer root does **not** call this module.

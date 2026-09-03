@@ -1,0 +1,16 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: kubevirt-hyperconverged
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  # HCP has no master nodes. CSV defaults can target control-plane node roles;
+  # Subscription spec.config.nodeSelector replaces that (does not merge).
+  config:
+    nodeSelector:
+      node-role.kubernetes.io/worker: ""

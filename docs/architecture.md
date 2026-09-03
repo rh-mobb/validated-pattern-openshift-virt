@@ -20,7 +20,7 @@ ANF data plane is VNet-native RFC1918. Volumes get IPs on the delegated subnet. 
 | Path | Why it is not RFC1918 / PE | Why it is allowed | How to tighten |
 |------|----------------------------|-------------------|----------------|
 | Trident → Azure Resource Manager | Public ARM HTTPS (workload identity) | Azure control plane; Trident must create/delete ANF volumes | ARM Private Link is not in this pattern |
-| Trident operator catalog / GitOps git | Public HTTPS | OLM + Argo pull payload and git | Private catalog / GHES later; add a row if you keep them public |
+| Trident / kubevirt-hyperconverged catalog, GitOps git | Public HTTPS | OLM + Argo pull payload and git | Private catalog / GHES later; add a row if you keep them public |
 | Cluster API / ingress / node outbound | Inherited from the installer cluster | Not created here | See installer [Network privacy](https://rh-mobb.github.io/validated-pattern-aro-hcp/architecture/#network-privacy) |
 
 Do not add a public IP, public PaaS data plane, or internet listener without a new row here. FSxN / Cloud NetApp Volumes slices must follow the same rule (VPC/VNet RFC1918, documented exceptions).
@@ -33,6 +33,7 @@ Do not add a public IP, public PaaS data plane, or internet listener without a n
 | NetApp account `<cluster>-anf` | Customer RG |
 | Capacity pool `<cluster>-anf-pool` | Flexible, Manual QoS, default 1 TiB, `custom_throughput_mibps` 128. Trident backend must set `defaults.qosType: Manual` (not `serviceLevel: Flexible` — Trident only accepts Standard/Premium/Ultra). |
 | Trident operator | Certified `trident-operator`; OperatorGroup is **AllNamespaces** (OwnNamespace is unsupported). `TridentOrchestrator` `cloudProvider: Azure` plus `cloudIdentity` for workload identity. |
+| OpenShift Virtualization | GitOps `gitops/operators/cnv`: `kubevirt-hyperconverged` from `redhat-operators` (`stable`) into `openshift-cnv`. HyperConverged `infra`/`workloads` nodePlacement is worker-only (HCP has no masters). Job patches StorageProfile `anf-virt` to RWX Filesystem for live migration. StorageClass annotation `storageclass.kubevirt.io/is-default-virt-class` — cluster default StorageClass stays `managed-csi`. |
 | UAMI `<cluster>-trident` | Custom role on the RG; federated credential for `trident/trident-controller` |
 
 Trident provisions ANF **volumes**. They are not in Terraform state. `scripts/trident-cleanup.sh` must run before `terraform destroy`.
@@ -42,4 +43,4 @@ Trident provisions ANF **volumes**. They are not in Terraform state. `scripts/tr
 - Canonical: slim `terraform/` root, second state, `platform_json` from installer `make cluster.<name>.platform`.
 - In-tree: `module "netapp" { source = "git::https://github.com/rh-mobb/validated-pattern-openshift-virt.git//modules/azure?ref=<tag>" }` in the deployer’s root. GitOps + cleanup stay outside the module.
 
-Do not create ANF volumes in Terraform. Do not steal the cluster default StorageClass (`managed-csi`).
+Do not create ANF volumes in Terraform. Do not steal the cluster default StorageClass (`managed-csi`). OpenShift Virtualization uses `anf-virt` via the virt-class annotation and StorageProfile RWX, not by changing the cluster default.

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cnv-storageprofile
+  namespace: openshift-cnv
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cnv-storageprofile
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get"]
+  - apiGroups: ["hco.kubevirt.io"]
+    resources: ["hyperconvergeds"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["storageprofiles"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cnv-storageprofile
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cnv-storageprofile
+subjects:
+  - kind: ServiceAccount
+    name: cnv-storageprofile
+    namespace: openshift-cnv
