@@ -6,17 +6,20 @@ Canonical install is **two GitHub checkouts**. Optional co-dev: gitignored `refe
 
 ## Operator path
 
+Canonical e2e (both repos, verify, destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/).
+
 ```bash
 # installer checkout
-make cluster.my-cluster.apply
-make cluster.my-cluster.kubeconfig
-make cluster.my-cluster.external-auth
-make cluster.my-cluster.bootstrap
-make cluster.my-cluster.platform
+make cluster.aro-virt.apply
+make cluster.aro-virt.kubeconfig
+make cluster.aro-virt.external-auth
+make cluster.aro-virt.bootstrap
+make cluster.aro-virt.platform
 
-# this checkout
-cp -r clusters/aro-virt clusters/my-cluster   # or use clusters/aro-virt in place
-ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp ARO_HCP_PROFILE=aro-virt \
+# this checkout — use the installer kubeconfig
+export ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp
+export KUBECONFIG_PATH="${ARO_HCP_ROOT}/.kube/config"
+ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt \
   make cluster.aro-virt.apply
 make cluster.aro-virt.bootstrap
 ```
