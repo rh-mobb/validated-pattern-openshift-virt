@@ -8,7 +8,7 @@ Keep structure, voice, and changelog rules aligned with the ARO HCP installer si
 |----------|---------|
 | [Prerequisites](prerequisites/index.md) | ANF quota, `Microsoft.NetApp`, tools |
 | [Consume](guides/consume.md) | Second IaC run vs in-tree `module` block |
-| [Architecture](architecture.md) | Resultant Azure/OpenShift resources, CIDRs, destroy order |
+| [Architecture](architecture.md) | Resultant Azure/OpenShift resources, CIDRs, destroy order, [network privacy](architecture.md#network-privacy) |
 
 ## Sibling docs
 

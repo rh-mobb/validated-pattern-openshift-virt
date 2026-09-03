@@ -6,4 +6,5 @@ Azure NetApp Files + Trident CSI for ARO HCP. Cluster installer: [validated-patt
 |------------|------------|
 | Understand consume modes | [Consume](guides/consume.md) |
 | See Azure resources | [Architecture](architecture.md) |
+| Network privacy (RFC1918 / Private Endpoints) | [Architecture — Network privacy](architecture.md#network-privacy) |
 | Check quota and permissions | [Prerequisites](prerequisites/index.md) |
