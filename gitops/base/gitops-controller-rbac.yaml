@@ -1,0 +1,19 @@
+# Default OpenShift GitOps ClusterRole is get/list/watch on * plus a few
+# OpenShift API groups (operators.coreos.com, storage.k8s.io, rbac, …).
+# This overlay creates ServiceAccounts, VolumeSnapshotClass, TridentOrchestrator,
+# and HyperConverged — those need create. The controller already has * on
+# rbac.authorization.k8s.io, so this binding can apply on wave -1 first.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rwx-storage-gitops-controller
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops

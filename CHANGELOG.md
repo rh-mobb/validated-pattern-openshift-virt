@@ -4,6 +4,11 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Fixed
+
+- Bind `cluster-admin` to the OpenShift GitOps application controller (`rwx-storage-gitops-controller`, sync-wave `-1`) so Argo can create Trident ServiceAccounts, `VolumeSnapshotClass`, `TridentOrchestrator`, and `HyperConverged`
+- Grant the `trident-from-metadata` Job a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get` (namespaced Role cannot `oc get`/`oc patch` those)
+
 ### Added
 
 - GitOps for OpenShift Virtualization (`kubevirt-hyperconverged` in `openshift-cnv`): worker-only HyperConverged, Job patches StorageProfile `anf-virt` to RWX Filesystem, StorageClass virt-class annotation (cluster default stays `managed-csi`)
