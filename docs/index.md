@@ -4,6 +4,7 @@ Azure NetApp Files + Trident CSI + OpenShift Virtualization for ARO HCP. Cluster
 
 | I want to… | Start here |
 |------------|------------|
+| Full two-checkout e2e | [Installer virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/) |
 | Understand consume modes | [Consume](guides/consume.md) |
 | See Azure resources | [Architecture](architecture.md) |
 | Network privacy (RFC1918 / Private Endpoints) | [Architecture — Network privacy](architecture.md#network-privacy) |
