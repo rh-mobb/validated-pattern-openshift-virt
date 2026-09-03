@@ -1,0 +1,29 @@
+name: Enhancement
+description: Request a change to ANF, Trident GitOps, or consume modes
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should this repo do that it does not do today?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Operator impact, consume mode (second IaC run vs in-tree module), and any related installer issue.
+  - type: dropdown
+    id: slice
+    attributes:
+      label: Slice
+      options:
+        - Azure NetApp Files / Terraform module
+        - Trident GitOps
+        - Cleanup / destroy
+        - AWS / GCP (future)
+        - OpenShift Virtualization (CNV)
+        - Docs
+        - Other
+      default: 0

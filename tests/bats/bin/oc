@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Mock oc for sibling bats.
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  kustomize)
+    cat <<'EOF'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trident
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: trident-operator
+  namespace: trident
+spec:
+  source: certified-operators
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: anf-virt
+EOF
+    ;;
+  get)
+    if [[ "$*" == *"crd tridentbackendconfigs"* ]]; then
+      exit 1
+    fi
+    echo "mock oc get $*"
+    ;;
+  whoami)
+    echo "system:admin"
+    ;;
+  *)
+    echo "mock oc ${cmd} $*" >&2
+    exit 0
+    ;;
+esac

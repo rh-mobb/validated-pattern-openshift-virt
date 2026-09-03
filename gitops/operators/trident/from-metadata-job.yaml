@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trident-from-metadata
+  namespace: trident
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: trident-from-metadata
+      containers:
+        - name: apply
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              wait_for() {
+                local desc="$1"; shift
+                local i
+                for i in $(seq 1 90); do
+                  if "$@" >/dev/null 2>&1; then return 0; fi
+                  sleep 10
+                done
+                echo "timed out waiting for ${desc}" >&2
+                exit 1
+              }
+              wait_for "anf-platform-metadata" oc -n openshift-gitops get configmap anf-platform-metadata
+              CLIENT_ID="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.tridentClientId}')"
+              SUB="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.subscriptionId}')"
+              TENANT="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.tenantId}')"
+              LOC="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.location}')"
+              RG="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.resourceGroupName}')"
+              VNET="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.vnetName}')"
+              SUBNET="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.subnetName}')"
+              ACCOUNT="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.netappAccountName}')"
+              POOL="$(oc -n openshift-gitops get configmap anf-platform-metadata -o jsonpath='{.data.capacityPoolName}')"
+              if [[ -z "${CLIENT_ID}" || -z "${SUB}" || -z "${ACCOUNT}" ]]; then
+                echo "anf-platform-metadata incomplete; re-run sibling bootstrap" >&2
+                exit 1
+              fi
+              wait_for "trident-controller SA" oc -n trident get serviceaccount trident-controller
+              oc -n trident annotate serviceaccount trident-controller \
+                "azure.workload.identity/client-id=${CLIENT_ID}" --overwrite || true
+              oc -n trident label serviceaccount trident-controller \
+                "azure.workload.identity/use=true" --overwrite || true
+              wait_for "TridentOrchestrator" oc get tridentorchestrator trident
+              oc patch tridentorchestrator trident --type merge -p "{\"spec\":{\"cloudProvider\":\"Azure\",\"cloudIdentity\":\"azure.workload.identity/client-id: ${CLIENT_ID}\"}}"
+              wait_for "TridentBackendConfig CRD" oc get crd tridentbackendconfigs.trident.netapp.io
+              oc apply -f - <<EOF
+              apiVersion: trident.netapp.io/v1
+              kind: TridentBackendConfig
+              metadata:
+                name: anf-backend
+                namespace: trident
+              spec:
+                version: 1
+                storageDriverName: azure-netapp-files
+                subscriptionID: "${SUB}"
+                tenantID: "${TENANT}"
+                location: "${LOC}"
+                nasType: nfs
+                nfsMountOptions: nfsvers=4.1
+                virtualNetwork: "${VNET}"
+                subnet: "${SUBNET}"
+                resourceGroups:
+                  - "${RG}"
+                netappAccounts:
+                  - "${ACCOUNT}"
+                capacityPools:
+                  - "${RG}/${ACCOUNT}/${POOL}"
+                defaults:
+                  qosType: Manual
+                  maxThroughput: "4"
+                storage:
+                  - labels:
+                      qos: manual
+                    defaults:
+                      qosType: Manual
+                      maxThroughput: "4"
+              EOF

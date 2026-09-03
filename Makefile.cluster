@@ -1,0 +1,44 @@
+SHELL := /bin/bash
+ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+TF_DIR := $(ROOT_DIR)/terraform
+SCRIPTS := $(ROOT_DIR)/scripts
+CLUSTER_PROFILE ?= $(error CLUSTER_PROFILE must be set)
+CLUSTER_DIR := $(ROOT_DIR)/clusters/$(CLUSTER_PROFILE)
+TFVARS := $(CLUSTER_DIR)/terraform.tfvars
+TF_STATE := $(CLUSTER_DIR)/infrastructure.tfstate
+export TFVARS
+export CLUSTER := $(CLUSTER_PROFILE)
+export TF_DATA_DIR := $(abspath $(CLUSTER_DIR)/.terraform)
+unexport CLUSTER_NAME
+ARO_HCP_ROOT ?=
+ARO_HCP_PROFILE ?= $(CLUSTER_PROFILE)
+
+.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform
+
+check-tfvars:
+	@test -f "$(TFVARS)" || (echo "Missing $(TFVARS)" >&2; exit 1)
+
+refresh-platform:
+	@if [ -n "$(ARO_HCP_ROOT)" ]; then \
+		$(MAKE) -C "$(ARO_HCP_ROOT)" cluster.$(ARO_HCP_PROFILE).platform; \
+	fi
+
+init: check-tfvars
+	terraform -chdir=$(TF_DIR) init -reconfigure -input=false \
+		-backend-config="path=$(TF_STATE)"
+
+plan: init refresh-platform
+	terraform -chdir=$(TF_DIR) plan -var-file="$(TFVARS)"
+
+apply: init refresh-platform
+	terraform -chdir=$(TF_DIR) apply -auto-approve -var-file="$(TFVARS)"
+
+cleanup:
+	bash $(SCRIPTS)/trident-cleanup.sh
+
+destroy: init cleanup
+	terraform -chdir=$(TF_DIR) destroy -auto-approve -var-file="$(TFVARS)"
+
+bootstrap:
+	@export TFVARS="$(TFVARS)"; \
+	bash $(SCRIPTS)/gitops-bootstrap.sh

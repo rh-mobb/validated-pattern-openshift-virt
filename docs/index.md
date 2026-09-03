@@ -1,0 +1,9 @@
+# OpenShift virt / RWX storage
+
+Azure NetApp Files + Trident CSI for ARO HCP. Cluster installer: [validated-pattern-aro-hcp](https://github.com/rh-mobb/validated-pattern-aro-hcp).
+
+| I want to… | Start here |
+|------------|------------|
+| Understand consume modes | [Consume](guides/consume.md) |
+| See Azure resources | [Architecture](architecture.md) |
+| Check quota and permissions | [Prerequisites](prerequisites/index.md) |

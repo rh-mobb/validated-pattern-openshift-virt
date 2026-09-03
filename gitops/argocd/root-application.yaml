@@ -1,0 +1,22 @@
+# Template rendered by scripts/gitops-bootstrap.sh
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rwx-storage
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/rh-mobb/validated-pattern-openshift-virt.git
+    targetRevision: main
+    path: gitops/overlays/azure
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true

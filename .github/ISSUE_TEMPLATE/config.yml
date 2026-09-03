@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: ARO HCP installer
+    url: https://github.com/rh-mobb/validated-pattern-aro-hcp/issues
+    about: Cluster create, identities, GitOps baseline, and platform.json belong in the installer sibling.

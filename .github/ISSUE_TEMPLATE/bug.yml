@@ -1,0 +1,26 @@
+name: Bug
+description: Something in this storage/virt stack is broken
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cluster install issues belong in [validated-pattern-aro-hcp](https://github.com/rh-mobb/validated-pattern-aro-hcp/issues).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got.
+    validations:
+      required: true
+  - type: input
+    id: make-target
+    attributes:
+      label: Make target
+      placeholder: make cluster.azure.apply
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / plan excerpt
+      description: Redact secrets, kubeconfig, and Terraform state.
+      render: text

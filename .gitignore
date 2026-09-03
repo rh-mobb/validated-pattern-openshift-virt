@@ -1,0 +1,45 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+
+# Operator copies (committed example is un-ignored)
+*.tfvars
+!clusters/azure/terraform.tfvars
+
+# Per-cluster operator artifacts
+clusters/*/infrastructure.tfstate*
+clusters/*/.terraform/
+clusters/*/terraform.tfplan
+clusters/*/platform.json
+
+# Kubeconfig and CLI artifacts
+.kube/
+*.kubeconfig
+kubeconfig
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+.history/
+*.swp
+*.swo
+
+# Test artifacts
+tests/bats/tmp/
+
+# MkDocs
+.venv-docs/
+site/
+
+# Secrets
+pull-secret.txt
+*.whl

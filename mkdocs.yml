@@ -1,0 +1,11 @@
+site_name: OpenShift virt / RWX storage
+site_url: https://rh-mobb.github.io/validated-pattern-openshift-virt/
+repo_url: https://github.com/rh-mobb/validated-pattern-openshift-virt
+repo_name: rh-mobb/validated-pattern-openshift-virt
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Prerequisites: prerequisites/index.md
+  - Consume: guides/consume.md
+  - Architecture: architecture.md

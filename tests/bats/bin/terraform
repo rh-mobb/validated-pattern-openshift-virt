@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == -chdir=* ]]; then shift; elif [[ "${1:-}" == "-chdir" ]]; then shift 2; fi
+sub="${1:-}"; shift || true
+if [[ "${sub}" == "output" && "${1:-}" == "-raw" ]]; then
+  case "${2:-}" in
+    trident_client_id) echo "00000000-0000-0000-0000-000000000099" ;;
+    subscription_id) echo "00000000-0000-0000-0000-000000000004" ;;
+    tenant_id) echo "00000000-0000-0000-0000-000000000001" ;;
+    location) echo "uksouth" ;;
+    resource_group_name) echo "test-rg" ;;
+    vnet_name) echo "test-cluster-vnet" ;;
+    subnet_name) echo "test-cluster-netapp" ;;
+    netapp_account_name) echo "test-cluster-anf" ;;
+    capacity_pool_name) echo "test-cluster-anf-pool" ;;
+    *) echo "" ;;
+  esac
+  exit 0
+fi
+echo "mock terraform ${sub} $*" >&2
+exit 0
