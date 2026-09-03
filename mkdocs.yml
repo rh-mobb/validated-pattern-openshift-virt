@@ -4,6 +4,10 @@ repo_url: https://github.com/rh-mobb/validated-pattern-openshift-virt
 repo_name: rh-mobb/validated-pattern-openshift-virt
 theme:
   name: material
+
+exclude_docs: |
+  README.md
+
 nav:
   - Home: index.md
   - Prerequisites: prerequisites/index.md
