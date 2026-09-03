@@ -37,6 +37,7 @@ When sources disagree:
 ## Hard rules
 
 - **`modules/azure` is the product.** `terraform/` is a thin root (providers, backend, platform ingest → `module "azure"`). Do not pile resources into the root.
+- **Network privacy:** RFC1918 or Azure Private Endpoints only. ANF NFS via the delegated subnet is compliant (not a Private Endpoint). If a path cannot comply, add a row to the exception table in [`docs/architecture.md`](docs/architecture.md#network-privacy) **in the same change**.
 - **Do not** create ANF volumes in Terraform. Trident provisions them. Cleanup script then `terraform destroy`.
 - **Do not** install a second Argo CD. Consume `openshift-gitops` from the installer bootstrap.
 - **Do not** steal the cluster default StorageClass (`managed-csi`) unless an explicit flag says so.
