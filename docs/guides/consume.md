@@ -1,25 +1,30 @@
 # Consume modes
 
+Canonical **two-checkout e2e** (installer apply → kubeconfig → external-auth → bootstrap → platform → this apply → this bootstrap, plus verify and destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/).
+
 ## Second IaC run (canonical)
 
 ```bash
 # installer
-make cluster.my-cluster.apply
-make cluster.my-cluster.kubeconfig
-make cluster.my-cluster.external-auth
-make cluster.my-cluster.bootstrap
-make cluster.my-cluster.platform
+make cluster.aro-virt.apply
+make cluster.aro-virt.kubeconfig
+make cluster.aro-virt.external-auth
+make cluster.aro-virt.bootstrap
+make cluster.aro-virt.platform
 
-# this repo
-cp -r clusters/aro-virt clusters/my-cluster
-# set platform_json in terraform.tfvars, or:
-ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.apply
+# this repo — kubeconfig is the installer's, not this checkout's .kube/config
+export ARO_HCP_ROOT=/path/to/validated-pattern-aro-hcp
+export ARO_HCP_PROFILE=aro-virt
+export KUBECONFIG_PATH="${ARO_HCP_ROOT}/.kube/config"
+export KUBECONFIG="${KUBECONFIG_PATH}"
+# unset TF_VAR_* in this shell (same rule as the installer)
+ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.apply
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy reverse: `make cluster.my-cluster.destroy` here (cleanup then terraform), then installer destroy.
+Destroy reverse: `make cluster.aro-virt.destroy` here (cleanup then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
 
-GitOps: this overlay binds `cluster-admin` to `openshift-gitops-argocd-application-controller` (the installer keeps the default least-privilege GitOps ClusterRole). The `trident-from-metadata` Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`.
+GitOps: this overlay binds `cluster-admin` to `openshift-gitops-argocd-application-controller` (the installer keeps the default least-privilege GitOps ClusterRole). The `trident-from-metadata` Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. Same Argo CD instance as the installer `cluster-config` Application.
 
 ## In-tree module
 

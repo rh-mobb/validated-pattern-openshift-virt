@@ -4,6 +4,10 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Changed
+
+- Point consume/README at the installer [Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/) e2e (KUBECONFIG_PATH, TF_VAR unset, leftover ANF volumes on destroy)
+
 ### Fixed
 
 - Bind `cluster-admin` to the OpenShift GitOps application controller (`rwx-storage-gitops-controller`, sync-wave `-1`) so Argo can create Trident ServiceAccounts, `VolumeSnapshotClass`, `TridentOrchestrator`, and `HyperConverged`
