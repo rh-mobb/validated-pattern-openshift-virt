@@ -1,3 +1,3 @@
-# Azure NetApp Files (GCP)
+# Google Cloud NetApp Volumes (GCP)
 
-Not implemented. The product surface is `modules/azure`. Do not add GCP resources here until a Filestore slice exists.
+Not implemented. The product surface today is `modules/azure`. Do not add GCP resources here until a Cloud NetApp Volumes slice exists.

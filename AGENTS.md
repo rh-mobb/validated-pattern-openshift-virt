@@ -52,7 +52,8 @@ When sources disagree:
 | Path | Purpose |
 |------|---------|
 | `modules/azure/` | Delegated subnet, NetApp account + pool, Trident identity + RBAC |
-| `modules/aws/`, `modules/gcp/` | Stubs only until those slices exist |
+| `modules/aws/` | Stub: Amazon FSx for NetApp ONTAP (not implemented) |
+| `modules/gcp/` | Stub: Google Cloud NetApp Volumes (not implemented) |
 | `terraform/` | Thin root: providers, backend, compose `module.azure` |
 | `clusters/<name>/` | Per-attachment `terraform.tfvars` + state |
 | `gitops/` | Trident operator, backend Job, StorageClass |
