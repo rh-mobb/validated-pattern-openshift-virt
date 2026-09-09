@@ -1,0 +1,15 @@
+# Workload namespace for the sample advertised CUDN. The primary-UDN label
+# must be set at create time — OpenShift admission rejects adding it later.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: virt
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+    openshift.io/display-name: Advertised CUDN for virtualization
+  labels:
+    k8s.ovn.org/primary-user-defined-network: ""
+    cluster-udn: virt
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

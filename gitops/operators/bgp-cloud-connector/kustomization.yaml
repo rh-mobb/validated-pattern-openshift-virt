@@ -8,6 +8,8 @@ resources:
   - build-rbac.yaml
   - from-metadata-rbac.yaml
   - from-metadata-job.yaml
+  # Temporary until openshift/bgp-cloud-connector#121 (see rh-mobb/validated-pattern-openshift-virt#9).
+  - azure-nic-ip-forwarding-ds.yaml
 images:
   - name: controller
     newName: image-registry.openshift-image-registry.svc:5000/openshift-bgp-cloud-connector/operator
