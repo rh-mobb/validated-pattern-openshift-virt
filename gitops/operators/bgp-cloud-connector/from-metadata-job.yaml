@@ -62,6 +62,18 @@ spec:
                 oc -n openshift-bgp-cloud-connector rollout restart "deploy/${DEPLOY}"
                 wait_for "AZURE_CLIENT_ID on manager pods" bash -c '[[ "$(oc -n openshift-bgp-cloud-connector get pods -l control-plane=controller-manager -o jsonpath="{.items[*].spec.containers[*].env[*].name}" 2>/dev/null)" == *AZURE_CLIENT_ID* ]]'
               fi
+              oc -n openshift-bgp-cloud-connector apply -f - <<EOF
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: azure-nic-ip-forwarding
+                namespace: openshift-bgp-cloud-connector
+                labels:
+                  app.kubernetes.io/name: azure-nic-ip-forwarding
+              data:
+                networkInterfaceClientId: "${NIC_CLIENT_ID}"
+                subscriptionId: "${SUB}"
+              EOF
               wait_for "BGPCloudConfiguration CRD" oc get crd bgpcloudconfigurations.networking.openshift.io
               oc apply -f - <<EOF
               apiVersion: networking.openshift.io/v1beta1

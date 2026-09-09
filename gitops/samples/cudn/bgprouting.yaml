@@ -1,0 +1,15 @@
+# Sample advertised network. bgp-cloud-connector creates ClusterUDN
+# cluster-udn-virt (label advertise=true) and the shared RouteAdvertisements.
+# Do not GitOps a ClusterUserDefinedNetwork for this path.
+apiVersion: networking.openshift.io/v1beta1
+kind: BGPRouting
+metadata:
+  name: virt
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  network:
+    name: virt
+    subnets:
+      - 192.168.100.0/24

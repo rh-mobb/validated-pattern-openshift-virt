@@ -1,0 +1,146 @@
+# Temporary: enable Azure NIC IP forwarding on every worker, including
+# non-speakers. Remove when openshift/bgp-cloud-connector#121 ships
+# (tracked: rh-mobb/validated-pattern-openshift-virt#9).
+#
+# Speakers already get this from the operator (routerNodeSelector). Extra-hop
+# CUDN replies egress the workload node's NIC with src=<CUDN IP>; Azure drops
+# that unless enableIPForwarding is true. Do not add bgp_router=true just to
+# get this flag — that creates Route Server peers (16 max).
+#
+# Uses the operator SA so Azure WI can exchange as installer cluster-api-azure
+# (networkInterfaceClientID). Customer principals cannot patch managed-RG NICs.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: azure-nic-ip-forwarding
+  namespace: openshift-bgp-cloud-connector
+  labels:
+    app.kubernetes.io/name: azure-nic-ip-forwarding
+    app.kubernetes.io/part-of: bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: azure-nic-ip-forwarding
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: azure-nic-ip-forwarding
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: openshift-bgp-cloud-connector-controller-manager
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      restartPolicy: Always
+      priorityClassName: system-node-critical
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      volumes:
+        - name: azure-cli-home
+          emptyDir: {}
+      containers:
+        - name: enable
+          image: mcr.microsoft.com/azure-cli:2.67.0
+          imagePullPolicy: IfNotPresent
+          env:
+            # WI webhook may append AZURE_CLIENT_ID from the SA (BGP MI).
+            # Login as cluster-api-azure; that federated cred is on this SA.
+            - name: CAPI_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: azure-nic-ip-forwarding
+                  key: networkInterfaceClientId
+            - name: AZURE_SUBSCRIPTION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: azure-nic-ip-forwarding
+                  key: subscriptionId
+            - name: HOME
+              value: /tmp
+            - name: AZURE_CONFIG_DIR
+              value: /tmp/.azure
+          volumeMounts:
+            - name: azure-cli-home
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              echo "azure-nic-ip-forwarding starting"
+              mkdir -p "${AZURE_CONFIG_DIR}"
+              export AZURE_CLIENT_ID="${CAPI_CLIENT_ID}"
+              TOKEN_FILE="${AZURE_FEDERATED_TOKEN_FILE:-/var/run/secrets/azure/tokens/azure-identity-token}"
+              IMDS="http://169.254.169.254/metadata/instance"
+              API="2021-12-13"
+              imds() {
+                curl -sf -H Metadata:true --noproxy '*' "${IMDS}/${1}?api-version=${API}&format=text"
+              }
+              i=0
+              while [[ "${i}" -lt 60 ]]; do
+                if [[ -s "${TOKEN_FILE}" ]]; then break; fi
+                sleep 2
+                i=$((i + 1))
+              done
+              if [[ ! -s "${TOKEN_FILE}" ]]; then
+                echo "timed out waiting for ${TOKEN_FILE}" >&2
+                exit 1
+              fi
+              az login --service-principal -u "${AZURE_CLIENT_ID}" --tenant "${AZURE_TENANT_ID}" \
+                --federated-token "$(cat "${TOKEN_FILE}")" -o none
+              az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
+              RG="$(imds compute/resourceGroupName)"
+              VM="$(imds compute/name)"
+              echo "node VM ${VM} in ${RG}"
+              while true; do
+                NICS="$(az vm nic list --resource-group "${RG}" --vm-name "${VM}" --query "[].id" -o tsv 2>/dev/null || true)"
+                if [[ -z "${NICS}" ]]; then
+                  echo "az vm nic list empty; falling back to ${VM}-nic" >&2
+                  NICS="$(az network nic show -g "${RG}" -n "${VM}-nic" --query id -o tsv)"
+                fi
+                echo "${NICS}" | while IFS= read -r nic_id; do
+                  [[ -z "${nic_id}" ]] && continue
+                  fwd="$(az network nic show --ids "${nic_id}" --query enableIPForwarding -o tsv)"
+                  name="$(az network nic show --ids "${nic_id}" --query name -o tsv)"
+                  if [[ "${fwd}" == "true" ]]; then
+                    echo "already enabled: ${name}"
+                  else
+                    echo "enabling IP forwarding on ${name}"
+                    az network nic update --ids "${nic_id}" --ip-forwarding true -o none
+                    echo "enabled: ${name}"
+                  fi
+                done
+                sleep 3600
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: azure-nic-ip-forwarding-hostnetwork
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:hostnetwork
+subjects:
+  - kind: ServiceAccount
+    name: openshift-bgp-cloud-connector-controller-manager
+    namespace: openshift-bgp-cloud-connector

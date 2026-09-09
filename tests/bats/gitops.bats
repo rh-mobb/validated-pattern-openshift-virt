@@ -29,6 +29,18 @@ setup() {
   [[ "$output" == *"networkInterfaceClientId:"* ]]
 }
 
+@test "sample CUDN is BGPRouting plus namespace, not a ClusterUserDefinedNetwork" {
+  ns="${BATS_TEST_DIRNAME}/../../gitops/samples/cudn/namespace.yaml"
+  rt="${BATS_TEST_DIRNAME}/../../gitops/samples/cudn/bgprouting.yaml"
+  grep -q 'k8s.ovn.org/primary-user-defined-network: ""' "${ns}"
+  grep -q 'cluster-udn: virt' "${ns}"
+  grep -q 'pod-security.kubernetes.io/enforce: privileged' "${ns}"
+  grep -q 'kind: BGPRouting' "${rt}"
+  grep -q 'name: virt' "${rt}"
+  grep -q '192.168.100.0/24' "${rt}"
+  ! grep -q 'kind: ClusterUserDefinedNetwork' "${BATS_TEST_DIRNAME}/../../gitops/samples/cudn/"*.yaml
+}
+
 @test "trident-from-metadata job sets Standard networkFeatures" {
   job="${BATS_TEST_DIRNAME}/../../gitops/operators/trident/from-metadata-job.yaml"
   grep -q 'networkFeatures: Standard' "${job}"

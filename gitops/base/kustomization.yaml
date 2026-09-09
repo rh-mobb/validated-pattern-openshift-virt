@@ -5,3 +5,4 @@ resources:
   - ../operators/trident
   - ../operators/cnv
   - ../operators/bgp-cloud-connector
+  - ../samples/cudn
