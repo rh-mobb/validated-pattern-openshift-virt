@@ -13,6 +13,9 @@ if [[ "${sub}" == "output" && "${1:-}" == "-raw" ]]; then
     subnet_name) echo "test-cluster-netapp" ;;
     netapp_account_name) echo "test-cluster-anf" ;;
     capacity_pool_name) echo "test-cluster-anf-pool" ;;
+    bgp_client_id) echo "00000000-0000-0000-0000-000000000098" ;;
+    network_interface_client_id) echo "00000000-0000-0000-0000-000000000097" ;;
+    route_server_name) echo "test-cluster-routeserver" ;;
     *) echo "" ;;
   esac
   exit 0

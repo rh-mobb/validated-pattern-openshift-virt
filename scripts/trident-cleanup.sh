@@ -18,8 +18,10 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'EOF'
 Usage: trident-cleanup.sh
 
-Deletes PVCs/PVs using STORAGE_CLASS (default anf-virt) and TridentBackendConfig
-anf-backend. Requires oc and a kubeconfig. Does not run terraform destroy.
+Deletes BGPCloudConfiguration / BGPRouting (so Azure Route Server peerings
+drain), then PVCs/PVs using STORAGE_CLASS (default anf-virt) and
+TridentBackendConfig anf-backend. Requires oc and a kubeconfig. Does not run
+terraform destroy.
 EOF
   exit 0
 fi
@@ -27,6 +29,14 @@ fi
 command -v oc >/dev/null || die "oc is required"
 export KUBECONFIG="${KUBECONFIG_PATH}"
 oc whoami >/dev/null 2>&1 || die "Cannot reach the API (oc whoami failed). Set KUBECONFIG."
+
+if oc get crd bgpcloudconfigurations.networking.openshift.io >/dev/null 2>&1; then
+  log "Deleting BGPRouting and BGPCloudConfiguration so the operator can drop Azure peerings"
+  oc delete bgproutings.networking.openshift.io --all --ignore-not-found --wait=true --timeout=120s || true
+  oc delete bgpcloudconfiguration cluster --ignore-not-found --wait=true --timeout=300s || true
+else
+  log "BGPCloudConfiguration CRD absent; skipping BGP drain"
+fi
 
 if ! oc get crd tridentbackendconfigs.trident.netapp.io >/dev/null 2>&1; then
   log "Trident CRDs absent; nothing to drain"

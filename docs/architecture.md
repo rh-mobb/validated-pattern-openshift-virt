@@ -8,19 +8,23 @@ This stack adds Azure NetApp Files and Trident CSI on top of an existing ARO HCP
 
 ANF data plane is VNet-native RFC1918. Volumes get IPs on the delegated subnet. There is **no** Private Endpoint — ANF NFS does not use Private Link for that path, and that is compliant.
 
+Azure Route Server BGP neighbors (`virtualRouterIps`) are also RFC1918. Azure still requires a **Standard public IP** on the Route Server for SDN management; that PIP is an exception below, not a customer BGP listener.
+
 ### Compliant (no exception)
 
 | Path | How it stays private |
 |------|----------------------|
 | ANF NFS | Delegated subnet in the cluster VNet (installer reserved `10.0.3.0/24`). Trident mounts NFSv4.1 to those private IPs. |
 | ANF subnet | Empty of NICs, **no NSG** (Azure requirement). Worker→ANF is east-west VNet traffic. |
+| Azure Route Server BGP | RFC1918 `virtualRouterIps` on `RouteServerSubnet` (installer reserved `10.0.4.0/26`, no NSG/UDR). Speakers and CUDN stay in the VNet. |
 
 ### Approved exceptions
 
 | Path | Why it is not RFC1918 / PE | Why it is allowed | How to tighten |
 |------|----------------------------|-------------------|----------------|
 | Trident → Azure Resource Manager | Public ARM HTTPS (workload identity) | Azure control plane; Trident must create/delete ANF volumes | ARM Private Link is not in this pattern |
-| Trident / kubevirt-hyperconverged catalog, GitOps git | Public HTTPS | OLM + Argo pull payload and git | Private catalog / GHES later; add a row if you keep them public |
+| Azure Route Server Standard public IP | Azure requires a PIP for SDN management of Route Server; not a customer BGP listener | Created with Route Server in this module | None; required by the Azure service |
+| Trident / kubevirt-hyperconverged catalog, GitOps git, bgp-cloud-connector source | Public HTTPS | OLM + Argo + OpenShift builds pull payload and git | Private catalog / GHES later; add a row if you keep them public |
 | Cluster API / ingress / node outbound | Inherited from the installer cluster | Not created here | See installer [Network privacy](https://rh-mobb.github.io/validated-pattern-aro-hcp/architecture/#network-privacy) |
 
 Do not add a public IP, public PaaS data plane, or internet listener without a new row here. FSxN / Cloud NetApp Volumes slices must follow the same rule (VPC/VNet RFC1918, documented exceptions).
@@ -30,15 +34,19 @@ Do not add a public IP, public PaaS data plane, or internet listener without a n
 | Resource | Notes |
 |----------|--------|
 | Subnet `<cluster>-netapp` | Delegated to `Microsoft.Netapp/volumes` (azurerm spelling; Azure service `Microsoft.NetApp/volumes`). **No NSG.** CIDR from installer `netapp_subnet_prefix` (default `10.0.3.0/24`). NFS is RFC1918 in-VNet, not a Private Endpoint. |
+| Subnet `RouteServerSubnet` | Azure-required name, **no NSG, no UDR**, CIDR from installer `route_server_subnet_prefix` (default `10.0.4.0/26`). |
+| Public IP + Azure Route Server `<cluster>-routeserver` | Standard PIP (management plane exception). BGP neighbors are RFC1918 `virtualRouterIps`. Apply fails without `bgp_router=true` in `platform.json` `node_pools`. |
+| UAMI `<cluster>-bgp` | Custom role: Route Server BGP connections **in the customer RG** only (no NIC write). Federated credential for `openshift-bgp-cloud-connector/openshift-bgp-cloud-connector-controller-manager`. NIC IP forwarding uses installer **`cluster-api-azure`** via `spec.azure.networkInterfaceClientID` (`platform.json` `cluster_api_azure_client_id`). Worker NICs are in the managed RG (RP deny assignment). Blast radius: the operator can act as full CAPI there. Installer [#20](https://github.com/rh-mobb/validated-pattern-aro-hcp/issues/20). |
+| bgp-cloud-connector | GitOps in-cluster build from `github.com/openshift/bgp-cloud-connector` `main` (not OLM until GA). Job stamps WI + `BGPCloudConfiguration` `platform: Azure` from `bgp-platform-metadata` (including `networkInterfaceClientID`). Deployment sync-wave `5` so the Job (wave 4) annotates the SA before manager pods admit. If the Deployment already exists (`oc apply -k` ignores waves), the Job `rollout restart`s it and waits until some pod spec has `AZURE_CLIENT_ID` (ImagePullBackOff is fine; the WI webhook only injects at create). |
 | NetApp account `<cluster>-anf` | Customer RG |
-| Capacity pool `<cluster>-anf-pool` | Flexible, Manual QoS, default 1 TiB, `custom_throughput_mibps` 128. Trident backend must set `defaults.qosType: Manual` (not `serviceLevel: Flexible` — Trident only accepts Standard/Premium/Ultra). |
+| Capacity pool `<cluster>-anf-pool` | Flexible, Manual QoS, default 1 TiB, `custom_throughput_mibps` 128. Trident backend must set `defaults.qosType: Manual` (not `serviceLevel: Flexible` — Trident only accepts Standard/Premium/Ultra) and `networkFeatures: Standard` (pools under 4 TiB reject Basic; snapshot clones of Basic golden images fail with `VolumesInSub4TiBPoolsCannotUseBasicNetworking`). |
 | Trident operator | Certified `trident-operator`; OperatorGroup is **AllNamespaces** (OwnNamespace is unsupported). `TridentOrchestrator` `cloudProvider: Azure` plus `cloudIdentity` for workload identity. |
 | OpenShift Virtualization | GitOps `gitops/operators/cnv`: `kubevirt-hyperconverged` from `redhat-operators` (`stable`) into `openshift-cnv`. HyperConverged `infra`/`workloads` nodePlacement is worker-only (HCP has no masters). Job patches StorageProfile `anf-virt` to RWX Filesystem for live migration. StorageClass annotation `storageclass.kubevirt.io/is-default-virt-class` — cluster default StorageClass stays `managed-csi`. |
 | GitOps controller | `gitops/base/gitops-controller-rbac.yaml` binds OpenShift `cluster-admin` to `openshift-gitops-argocd-application-controller` (`rwx-storage-gitops-controller`, sync-wave `-1`). Default OpenShift GitOps is get/list/watch plus a few API groups — not enough to create ServiceAccounts, `VolumeSnapshotClass`, `TridentOrchestrator`, or `HyperConverged`. The controller already has `*` on `rbac.authorization.k8s.io`, so this binding can apply first. The installer baseline keeps the limited controller (ESO ignores ServiceAccount drift). |
 | `trident-from-metadata` Job | Namespaced Role in `trident` for ServiceAccounts / `TridentBackendConfig`. **ClusterRole** for cluster-scoped `TridentOrchestrator` and `get` on CRDs (the Job `oc get crd` / `oc patch tridentorchestrator`). |
 | UAMI `<cluster>-trident` | Custom role on the RG; federated credential for `trident/trident-controller` |
 
-Trident provisions ANF **volumes**. They are not in Terraform state. `scripts/trident-cleanup.sh` must run before `terraform destroy`.
+Trident provisions ANF **volumes**. They are not in Terraform state. `scripts/trident-cleanup.sh` must run before `terraform destroy` (it also deletes `BGPCloudConfiguration` so the operator can drop Azure BGP connections).
 
 ## Consume
 

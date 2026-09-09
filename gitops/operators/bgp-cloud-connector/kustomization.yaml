@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # CRDs + manager + RBAC from operator main (in-cluster image is patched below).
+  - https://github.com/openshift/bgp-cloud-connector/config/default?ref=main
+  - imagestream.yaml
+  - buildconfig.yaml
+  - build-rbac.yaml
+  - from-metadata-rbac.yaml
+  - from-metadata-job.yaml
+images:
+  - name: controller
+    newName: image-registry.openshift-image-registry.svc:5000/openshift-bgp-cloud-connector/operator
+    newTag: dev
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: openshift-bgp-cloud-connector-controller-manager
+    path: wi-patch.yaml

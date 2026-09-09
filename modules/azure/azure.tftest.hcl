@@ -10,12 +10,15 @@ mock_provider "azurerm" {
 }
 
 variables {
-  cluster_name        = "test-cluster"
-  resource_group_name = "test-rg"
-  location            = "uksouth"
-  vnet_name           = "test-cluster-vnet"
-  subnet_prefix       = "10.0.3.0/24"
-  oidc_issuer_url     = "https://uksouth.oic.aro.azure.com/tenant/test"
+  cluster_name                = "test-cluster"
+  resource_group_name         = "test-rg"
+  location                    = "uksouth"
+  vnet_name                   = "test-cluster-vnet"
+  subnet_prefix               = "10.0.3.0/24"
+  route_server_subnet_prefix  = "10.0.4.0/26"
+  bgp_router_pool_names       = ["np-virt"]
+  oidc_issuer_url             = "https://uksouth.oic.aro.azure.com/tenant/test"
+  network_interface_client_id = "00000000-0000-0000-0000-000000000097"
 }
 
 run "delegates_subnet_to_netapp_without_nsg" {
@@ -81,4 +84,102 @@ run "skips_federated_credential_without_oidc" {
     condition     = length(azurerm_federated_identity_credential.trident) == 0
     error_message = "Empty oidc_issuer_url must skip the federated credential."
   }
+
+  assert {
+    condition     = length(azurerm_federated_identity_credential.bgp) == 0
+    error_message = "Empty oidc_issuer_url must skip the BGP federated credential."
+  }
+}
+
+run "route_server_subnet_is_named_routeserversubnet" {
+  command = plan
+
+  assert {
+    condition     = azurerm_subnet.route_server.name == "RouteServerSubnet"
+    error_message = "Azure Route Server subnet must be named RouteServerSubnet."
+  }
+
+  assert {
+    condition     = azurerm_subnet.route_server.address_prefixes[0] == "10.0.4.0/26"
+    error_message = "Route Server subnet prefix must come from the platform reserved CIDR."
+  }
+
+  assert {
+    condition     = azurerm_public_ip.route_server.sku == "Standard"
+    error_message = "Route Server public IP must be Standard SKU."
+  }
+
+  assert {
+    condition     = azurerm_route_server.this.sku == "Standard"
+    error_message = "Route Server sku must be Standard."
+  }
+}
+
+run "bgp_identity_federates_operator_sa" {
+  command = plan
+
+  assert {
+    condition     = azurerm_federated_identity_credential.bgp[0].subject == "system:serviceaccount:openshift-bgp-cloud-connector:openshift-bgp-cloud-connector-controller-manager"
+    error_message = "Federated credential must trust the bgp-cloud-connector manager ServiceAccount."
+  }
+}
+
+run "bgp_role_is_route_server_only" {
+  command = plan
+
+  assert {
+    condition = !contains(
+      azurerm_role_definition.bgp_cloud_connector.permissions[0].actions,
+      "Microsoft.Network/networkInterfaces/write"
+    )
+    error_message = "Sibling BGP MI must not grant NIC write; ARO speaker NICs are in the managed RG. Use installer cluster-api-azure via networkInterfaceClientID."
+  }
+
+  assert {
+    condition = !contains(
+      azurerm_role_definition.bgp_cloud_connector.permissions[0].actions,
+      "Microsoft.Network/networkInterfaces/read"
+    )
+    error_message = "Sibling BGP MI must not grant NIC read in the customer RG; NIC forwarding uses CAPI in the managed RG."
+  }
+
+  assert {
+    condition = contains(
+      azurerm_role_definition.bgp_cloud_connector.permissions[0].actions,
+      "Microsoft.Network/virtualHubs/bgpConnections/write"
+    )
+    error_message = "Sibling BGP MI must still write Route Server BGP connections."
+  }
+
+  assert {
+    condition = !contains(
+      azurerm_role_definition.bgp_cloud_connector.permissions[0].actions,
+      "Microsoft.Network/routeServers/read"
+    )
+    error_message = "Azure RBAC does not accept Microsoft.Network/routeServers/*; Route Server is virtualHubs."
+  }
+}
+
+run "fails_without_bgp_speaker_pools" {
+  command = plan
+
+  variables {
+    bgp_router_pool_names = []
+  }
+
+  expect_failures = [
+    terraform_data.bgp_prereqs,
+  ]
+}
+
+run "fails_without_capi_network_interface_client_id" {
+  command = plan
+
+  variables {
+    network_interface_client_id = ""
+  }
+
+  expect_failures = [
+    terraform_data.bgp_prereqs,
+  ]
 }

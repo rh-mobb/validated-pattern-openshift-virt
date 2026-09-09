@@ -22,10 +22,29 @@ setup() {
   [[ "$output" == *"name: trident-from-metadata"* ]]
   [[ "$output" == *"tridentorchestrators"* ]]
   [[ "$output" == *"customresourcedefinitions"* ]]
+  [[ "$output" == *"name: bgp-platform-metadata"* ]]
+  [[ "$output" == *"name: bgp-from-metadata"* ]]
+  [[ "$output" == *"kind: BuildConfig"* ]]
+  [[ "$output" == *"name: operator"* ]]
+  [[ "$output" == *"networkInterfaceClientId:"* ]]
+}
+
+@test "trident-from-metadata job sets Standard networkFeatures" {
+  job="${BATS_TEST_DIRNAME}/../../gitops/operators/trident/from-metadata-job.yaml"
+  grep -q 'networkFeatures: Standard' "${job}"
+}
+
+@test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {
+  job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
+  grep -q 'networkInterfaceClientId' "${job}"
+  grep -q 'networkInterfaceClientID:' "${job}"
+  grep -q 'AZURE_CLIENT_ID' "${job}"
+  grep -q 'rollout restart' "${job}"
+  grep -q 'wait_for "AZURE_CLIENT_ID on manager pods"' "${job}"
 }
 
 @test "cleanup is idempotent when trident CRDs are absent" {
   run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Trident CRDs absent"* ]] || [[ "$output" == *"Cleanup finished"* ]]
+  [[ "$output" == *"Cleanup finished"* ]] || [[ "$output" == *"Trident CRDs absent"* ]] || [[ "$output" == *"BGPCloudConfiguration CRD absent"* ]]
 }

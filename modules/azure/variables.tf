@@ -58,6 +58,28 @@ variable "custom_throughput_mibps" {
   default     = 128
 }
 
+variable "route_server_subnet_prefix" {
+  description = "Installer-reserved CIDR for Azure Route Server (subnet must be named RouteServerSubnet, /26 or larger)."
+  type        = string
+}
+
+variable "bgp_router_pool_names" {
+  description = "platform.json node pool names that have labels.bgp_router = true."
+  type        = list(string)
+}
+
+variable "bgp_federated_subject" {
+  description = "Federated credential subject for the bgp-cloud-connector manager ServiceAccount."
+  type        = string
+  default     = "system:serviceaccount:openshift-bgp-cloud-connector:openshift-bgp-cloud-connector-controller-manager"
+}
+
+variable "network_interface_client_id" {
+  description = "Installer cluster-api-azure client ID (BGPCloudConfiguration spec.azure.networkInterfaceClientID). Empty fails apply."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

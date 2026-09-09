@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bgp-from-metadata
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 12
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: bgp-from-metadata
+      containers:
+        - name: apply
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              wait_for() {
+                local desc="$1"; shift
+                local i
+                for i in $(seq 1 90); do
+                  if "$@" >/dev/null 2>&1; then return 0; fi
+                  sleep 10
+                done
+                echo "timed out waiting for ${desc}" >&2
+                exit 1
+              }
+              wait_for "bgp-platform-metadata" oc -n openshift-gitops get configmap bgp-platform-metadata
+              CLIENT_ID="$(oc -n openshift-gitops get configmap bgp-platform-metadata -o jsonpath='{.data.bgpClientId}')"
+              NIC_CLIENT_ID="$(oc -n openshift-gitops get configmap bgp-platform-metadata -o jsonpath='{.data.networkInterfaceClientId}')"
+              SUB="$(oc -n openshift-gitops get configmap bgp-platform-metadata -o jsonpath='{.data.subscriptionId}')"
+              RG="$(oc -n openshift-gitops get configmap bgp-platform-metadata -o jsonpath='{.data.resourceGroupName}')"
+              RS="$(oc -n openshift-gitops get configmap bgp-platform-metadata -o jsonpath='{.data.routeServerName}')"
+              if [[ -z "${CLIENT_ID}" || -z "${NIC_CLIENT_ID}" || -z "${SUB}" || -z "${RG}" || -z "${RS}" ]]; then
+                echo "bgp-platform-metadata incomplete; re-run sibling bootstrap (needs installer cluster_api_azure_client_id)" >&2
+                exit 1
+              fi
+              SA=openshift-bgp-cloud-connector-controller-manager
+              wait_for "operator SA" oc -n openshift-bgp-cloud-connector get serviceaccount "${SA}"
+              oc -n openshift-bgp-cloud-connector annotate serviceaccount "${SA}" \
+                "azure.workload.identity/client-id=${CLIENT_ID}" --overwrite
+              oc -n openshift-bgp-cloud-connector label serviceaccount "${SA}" \
+                "azure.workload.identity/use=true" --overwrite
+              # WI webhook injects AZURE_CLIENT_ID only at pod create. oc apply -k
+              # ignores Argo waves, so the first ReplicaSet is often admitted before
+              # this annotation (ImagePullBackOff during the in-cluster build). If the
+              # Deployment already exists, always restart and wait for the env on the
+              # pod spec (not Running). Do not wait for the Deployment itself: this Job
+              # is wave 4 and the manager is wave 5.
+              DEPLOY=openshift-bgp-cloud-connector-controller-manager
+              if oc -n openshift-bgp-cloud-connector get deploy "${DEPLOY}" >/dev/null 2>&1; then
+                echo "restarting ${DEPLOY} so WI webhook injects AZURE_CLIENT_ID" >&2
+                oc -n openshift-bgp-cloud-connector rollout restart "deploy/${DEPLOY}"
+                wait_for "AZURE_CLIENT_ID on manager pods" bash -c '[[ "$(oc -n openshift-bgp-cloud-connector get pods -l control-plane=controller-manager -o jsonpath="{.items[*].spec.containers[*].env[*].name}" 2>/dev/null)" == *AZURE_CLIENT_ID* ]]'
+              fi
+              wait_for "BGPCloudConfiguration CRD" oc get crd bgpcloudconfigurations.networking.openshift.io
+              oc apply -f - <<EOF
+              apiVersion: networking.openshift.io/v1beta1
+              kind: BGPCloudConfiguration
+              metadata:
+                name: cluster
+              spec:
+                platform: Azure
+                bgp:
+                  localASN: 65001
+                  livenessDetection: bgp-keepalive
+                routerNodeSelector:
+                  bgp_router: "true"
+                azure:
+                  subscriptionID: "${SUB}"
+                  resourceGroup: "${RG}"
+                  routeServerName: "${RS}"
+                  networkInterfaceClientID: "${NIC_CLIENT_ID}"
+              EOF

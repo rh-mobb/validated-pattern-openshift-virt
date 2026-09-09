@@ -33,3 +33,27 @@ output "trident_client_id" {
 output "trident_principal_id" {
   value = azurerm_user_assigned_identity.trident.principal_id
 }
+
+output "route_server_name" {
+  value = azurerm_route_server.this.name
+}
+
+output "route_server_id" {
+  value = azurerm_route_server.this.id
+}
+
+output "route_server_subnet_prefix" {
+  value = var.route_server_subnet_prefix
+}
+
+output "bgp_client_id" {
+  value = azurerm_user_assigned_identity.bgp.client_id
+}
+
+output "bgp_identity_id" {
+  value = azurerm_user_assigned_identity.bgp.id
+}
+
+output "network_interface_client_id" {
+  value = var.network_interface_client_id
+}
