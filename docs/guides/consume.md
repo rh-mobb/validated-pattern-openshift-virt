@@ -22,9 +22,9 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.ap
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy reverse: `make cluster.aro-virt.destroy` here (cleanup then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
+Destroy reverse: `make cluster.aro-virt.destroy` here (BGP CR drain + ANF cleanup then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
 
-GitOps: this overlay binds `cluster-admin` to `openshift-gitops-argocd-application-controller` (the installer keeps the default least-privilege GitOps ClusterRole). The `trident-from-metadata` Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. Same Argo CD instance as the installer `cluster-config` Application.
+GitOps: this overlay binds `cluster-admin` to `openshift-gitops-argocd-application-controller` (the installer keeps the default least-privilege GitOps ClusterRole). The `trident-from-metadata` Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. BGP operator is an in-cluster build of [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) `main`; `bgp-from-metadata` stamps workload identity (sibling BGP MI) and `BGPCloudConfiguration` including `networkInterfaceClientID` (installer `cluster-api-azure`). Same Argo CD instance as the installer `cluster-config` Application.
 
 ## In-tree module
 
@@ -36,8 +36,11 @@ module "netapp" {
   resource_group_name = module.network.resource_group_name
   location            = module.network.location
   vnet_name           = module.network.vnet_name
-  subnet_prefix       = "10.0.3.0/24"
-  oidc_issuer_url     = module.cluster.oidc_issuer_url
+  subnet_prefix                = "10.0.3.0/24"
+  route_server_subnet_prefix   = "10.0.4.0/26"
+  bgp_router_pool_names        = ["np-virt"]
+  oidc_issuer_url              = module.cluster.oidc_issuer_url
+  network_interface_client_id  = module.identities.cluster_api_azure_client_id
 }
 ```
 

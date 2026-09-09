@@ -7,6 +7,14 @@ metadata:
     argocd.argoproj.io/sync-wave: "3"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
+  resourceRequirements:
+    storageWorkloads:
+      limits:
+        memory: 4Gi
+        cpu: "2"
+      requests:
+        memory: 1Gi
+        cpu: "500m"
   infra:
     nodePlacement:
       nodeSelector:

@@ -51,10 +51,20 @@ metadata:
   namespace: openshift-cnv
 spec:
   source: redhat-operators
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: operator
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bgp-from-metadata
 EOF
     ;;
   get)
-    if [[ "$*" == *"crd tridentbackendconfigs"* ]]; then
+    if [[ "$*" == *"crd tridentbackendconfigs"* || "$*" == *"crd bgpcloudconfigurations"* ]]; then
       exit 1
     fi
     echo "mock oc get $*"

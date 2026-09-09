@@ -4,7 +4,7 @@ Instructions for AI agents working in this repository.
 
 ## What this repo is
 
-Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI) and **OpenShift Virtualization**. Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, and a Trident identity. GitOps installs Trident and the kubevirt-hyperconverged operator. A standalone cleanup script drains Trident/ANF volumes that Terraform does not own.
+Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI), **OpenShift Virtualization**, and **CUDN BGP** (Azure Route Server + in-cluster [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector)). Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, `RouteServerSubnet` + Route Server, and Trident/BGP identities. GitOps installs Trident, kubevirt-hyperconverged, and builds the BGP operator from `main`. Cleanup drains BGP CRs then Trident/ANF volumes.
 
 This is **not** an OpenShift cluster installer. The cluster lives in the sibling **ARO HCP** pattern: [`rh-mobb/validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp). Do not create an HCP cluster here. Do not add AWS/GCP providers beyond empty module stubs until those slices exist.
 
@@ -12,7 +12,7 @@ This is **not** an OpenShift cluster installer. The cluster lives in the sibling
 
 | | ARO HCP (`validated-pattern-aro-hcp`) | This repo |
 |--|--------------------------------------|-----------|
-| Role | Cluster + GitOps baseline (ESO, OpenShift GitOps) | ANF + Trident + OpenShift Virtualization |
+| Role | Cluster + GitOps baseline (ESO, OpenShift GitOps) | ANF + Trident + OpenShift Virtualization + Azure Route Server |
 | Canonical consume | `make cluster.<name>.apply` then bootstrap | Second IaC run: slim `terraform/` root |
 | In-tree consume | N/A (this module is not called from the installer) | Deployer may `module` `git::…//modules/azure?ref=<tag>` in *their* root |
 | Local co-dev | This checkout | Gitignored `references/validated-pattern-openshift-virt` inside the installer, **or** a sibling directory next to it |
@@ -32,13 +32,14 @@ When sources disagree:
 1. **This repo’s `modules/azure`** and GitOps manifests — what we actually deploy.
 2. [Microsoft: ANF + OpenShift Virtualization on ARO](https://learn.microsoft.com/en-us/azure/openshift/howto-netapp-files) — Trident version floor, StorageProfile RWX, Flexible/Manual QoS.
 3. [RH experts: Trident on ARO](https://cloud.redhat.com/experts/aro/trident/) — OperatorHub install, backend secret vs inline credentials.
-4. Installer sibling `AGENTS.md` / `docs/architecture.md` — VNet, reserved CIDR `10.0.3.0/24`, jump `10.0.2.0/28`, OIDC issuer, Key Vault.
+4. Installer sibling `AGENTS.md` / `docs/architecture.md` — VNet, reserved CIDRs `10.0.3.0/24` (ANF) and `10.0.4.0/26` (Route Server), jump `10.0.2.0/28`, OIDC issuer, Key Vault.
 
 ## Hard rules
 
 - **`modules/azure` is the product.** `terraform/` is a thin root (providers, backend, platform ingest → `module "azure"`). Do not pile resources into the root.
 - **Network privacy:** RFC1918 or Azure Private Endpoints only. ANF NFS via the delegated subnet is compliant (not a Private Endpoint). If a path cannot comply, add a row to the exception table in [`docs/architecture.md`](docs/architecture.md#network-privacy) **in the same change**.
 - **Do not** create ANF volumes in Terraform. Trident provisions them. Cleanup script then `terraform destroy`.
+- **BGP NIC writes:** sibling MI is Route Server BGP connections only. `networkInterfaceClientID` is installer `cluster_api_azure_client_id`. Do not add a customer MI for managed-RG NIC write.
 - **Do not** install a second Argo CD. Consume `openshift-gitops` from the installer bootstrap.
 - **Do not** steal the cluster default StorageClass (`managed-csi`) unless an explicit flag says so.
 - **Do not** use Azure Files for VM disks.
@@ -52,12 +53,12 @@ When sources disagree:
 
 | Path | Purpose |
 |------|---------|
-| `modules/azure/` | Delegated subnet, NetApp account + pool, Trident identity + RBAC |
+| `modules/azure/` | Delegated ANF subnet, NetApp account + pool, Route Server, Trident + BGP identities |
 | `modules/aws/` | Stub: Amazon FSx for NetApp ONTAP (not implemented) |
 | `modules/gcp/` | Stub: Google Cloud NetApp Volumes (not implemented) |
 | `terraform/` | Thin root: providers, backend, compose `module.azure` |
 | `clusters/<name>/` | Per-attachment `terraform.tfvars` + state |
-| `gitops/` | Trident operator, backend Job, StorageClass; OpenShift Virtualization (`openshift-cnv`) |
+| `gitops/` | Trident, CNV, in-cluster bgp-cloud-connector build |
 | `scripts/` | `trident-cleanup.sh` (standalone), bootstrap |
 | `docs/` | Operator guides (MkDocs): prerequisites, architecture, consume modes |
 | `AGENTS.md` | This file — agents read it first |
@@ -103,6 +104,7 @@ Use this when the user asks to apply, verify, or destroy real ANF/Trident. `make
 
 - Capacity pool exists; delegated subnet is `Microsoft.NetApp/volumes`.
 - Continue with bootstrap. Storage-done signal: PVC on `anf-virt` binds RWX. Virt-done signal: `HyperConverged` Available and StorageProfile `anf-virt` is RWX Filesystem.
+- Before large DataVolume clone/upload tests: `oc get cdiconfig config -o jsonpath='{.status.defaultPodResourceRequirements.limits.memory}'` must show **4Gi** (GitOps `spec.resourceRequirements.storageWorkloads` on `kubevirt-hyperconverged`). Default ~600M OOMs around 65% on large images.
 
 ### Destroy
 

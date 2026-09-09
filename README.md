@@ -1,6 +1,6 @@
 # OpenShift virt / RWX storage
 
-Second IaC run for **Azure NetApp Files + Trident CSI + OpenShift Virtualization**. This is **not** part of [`validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp) `make cluster.<name>.apply`.
+Second IaC run for **Azure NetApp Files + Trident CSI + OpenShift Virtualization + Azure Route Server**. This is **not** part of [`validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp) `make cluster.<name>.apply`.
 
 Canonical install is **two GitHub checkouts**. Optional co-dev: gitignored `references/validated-pattern-openshift-virt` inside the installer.
 
@@ -24,14 +24,14 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt \
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy **this stack first** (`make cluster.<name>.destroy` runs Trident/ANF volume cleanup, then Terraform). Then destroy the installer cluster.
+Destroy **this stack first** (`make cluster.<name>.destroy` drains BGP CRs then Trident/ANF volumes, then Terraform). Then destroy the installer cluster.
 
 Do not install a second Argo CD. Do not create ANF volumes in Terraform.
 
 ## Layout
 
 ```text
-modules/azure/             # product: delegated subnet, ANF account+pool, identity
+modules/azure/             # product: ANF, Route Server, identities
 terraform/                 # slim root — platform.json → module.azure
 gitops/                    # Trident + OpenShift Virtualization (outside the Terraform module)
 scripts/trident-cleanup.sh

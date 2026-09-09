@@ -70,6 +70,7 @@ spec:
                 location: "${LOC}"
                 nasType: nfs
                 nfsMountOptions: nfsvers=4.1
+                networkFeatures: Standard
                 virtualNetwork: "${VNET}"
                 subnet: "${SUBNET}"
                 resourceGroups:
@@ -81,10 +82,12 @@ spec:
                 defaults:
                   qosType: Manual
                   maxThroughput: "4"
+                  networkFeatures: Standard
                 storage:
                   - labels:
                       qos: manual
                     defaults:
                       qosType: Manual
                       maxThroughput: "4"
+                      networkFeatures: Standard
               EOF

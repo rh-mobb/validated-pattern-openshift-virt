@@ -1,0 +1,7 @@
+- op: add
+  path: /spec/template/metadata/labels/azure.workload.identity~1use
+  value: "true"
+# Annotate SA (Job, wave 4) before the manager pods exist.
+- op: add
+  path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+  value: "5"

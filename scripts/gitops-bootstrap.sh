@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plant Argo Application rwx-storage and ConfigMap anf-platform-metadata.
+# Plant Argo Application rwx-storage and ConfigMaps anf-platform-metadata + bgp-platform-metadata.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +46,18 @@ data:
   subnetName: "$(tf_raw subnet_name)"
   netappAccountName: "$(tf_raw netapp_account_name)"
   capacityPoolName: "$(tf_raw capacity_pool_name)"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bgp-platform-metadata
+  namespace: openshift-gitops
+data:
+  bgpClientId: "$(tf_raw bgp_client_id)"
+  networkInterfaceClientId: "$(tf_raw network_interface_client_id)"
+  subscriptionId: "$(tf_raw subscription_id)"
+  resourceGroupName: "$(tf_raw resource_group_name)"
+  routeServerName: "$(tf_raw route_server_name)"
 EOF
 }
 
@@ -67,4 +79,4 @@ oc whoami >/dev/null 2>&1 || die "Cannot reach the API."
 
 metadata_cm | oc apply -f -
 render_app | oc apply -f -
-log "Applied rwx-storage Application and anf-platform-metadata"
+log "Applied rwx-storage Application, anf-platform-metadata, and bgp-platform-metadata"

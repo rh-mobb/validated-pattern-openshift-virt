@@ -45,3 +45,16 @@ output "tenant_id" {
 output "vnet_name" {
   value = local.platform.network.vnet_name
 }
+
+output "route_server_name" {
+  value = module.azure.route_server_name
+}
+
+output "bgp_client_id" {
+  value = module.azure.bgp_client_id
+}
+
+output "network_interface_client_id" {
+  description = "Installer cluster-api-azure client ID for BGPCloudConfiguration networkInterfaceClientID."
+  value       = try(local.platform.cluster_api_azure_client_id, "")
+}
