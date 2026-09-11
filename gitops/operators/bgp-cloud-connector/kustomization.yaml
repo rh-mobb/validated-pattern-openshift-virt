@@ -1,8 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # CRDs + manager + RBAC from operator main (in-cluster image is patched below).
-  - https://github.com/openshift/bgp-cloud-connector/config/default?ref=main
+  # CRDs + manager + RBAC. Pin must match BuildConfig spec.source.git.ref
+  # (v1beta1 BGPCloudConfiguration/BGPRouting; bump both together).
+  - https://github.com/openshift/bgp-cloud-connector/config/default?ref=2b6ad93989a2adfe4b52d4067f70a782aabd9a11
   - imagestream.yaml
   - buildconfig.yaml
   - build-rbac.yaml

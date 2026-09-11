@@ -12,7 +12,8 @@ spec:
     type: Git
     git:
       uri: https://github.com/openshift/bgp-cloud-connector.git
-      ref: main
+      # Same SHA as kustomization.yaml config/default?ref= (not floating main).
+      ref: 2b6ad93989a2adfe4b52d4067f70a782aabd9a11
   strategy:
     type: Docker
     dockerStrategy:

@@ -9,7 +9,7 @@ case "${cmd}" in
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: rwx-storage-gitops-controller
+  name: virt-stack-gitops-controller
 roleRef:
   kind: ClusterRole
   name: cluster-admin

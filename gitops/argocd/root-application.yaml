@@ -2,7 +2,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: rwx-storage
+  name: virt-stack
   namespace: openshift-gitops
 spec:
   project: default

@@ -19,6 +19,7 @@ clusters/*/infrastructure.tfstate*
 clusters/*/.terraform/
 clusters/*/terraform.tfplan
 clusters/*/platform.json
+clusters/*/logs/
 
 # Kubeconfig and CLI artifacts
 .kube/
