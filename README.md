@@ -6,11 +6,12 @@ Canonical install is **two GitHub checkouts**. Optional co-dev: gitignored `refe
 
 ## Operator path
 
-Canonical e2e (both repos, verify, destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/).
+Canonical e2e (both repos, verify, destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/). Agent: [`clusters/aro-virt/AGENTS.md`](clusters/aro-virt/AGENTS.md).
 
 ```bash
 # installer checkout
-make cluster.aro-virt.apply
+make cluster.aro-virt.jump-key             # then jump_ssh_source_prefix = operator /32
+make cluster.aro-virt.apply                # includes np-virt (no virt-pool target)
 make cluster.aro-virt.kubeconfig
 make cluster.aro-virt.external-auth
 make cluster.aro-virt.bootstrap
@@ -36,7 +37,7 @@ terraform/                 # slim root — platform.json → module.azure
 gitops/                    # Trident + OpenShift Virtualization (outside the Terraform module)
 scripts/trident-cleanup.sh
 clusters/azure/            # generic in-tree / module consume example
-clusters/aro-virt/         # matches installer clusters/aro-virt
+clusters/aro-virt/         # matches installer clusters/aro-virt (+ AGENTS.md)
 ```
 
 In-tree consume: `source = "git::https://github.com/rh-mobb/validated-pattern-openshift-virt.git//modules/azure?ref=<tag>"` in the deployer's root. Pin `ref` to a tag. GitOps and cleanup stay outside the module.

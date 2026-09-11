@@ -4,10 +4,11 @@ metadata:
   name: bgp-from-metadata
   namespace: openshift-bgp-cloud-connector
   annotations:
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Regular sync-wave resource (not a Sync hook). Argo applies non-hook manifests
+    # before Sync hooks, so hook: Sync let wave-6 azure-nic-ip-forwarding start
+    # without this Job's ConfigMap. Wave 4 runs before wave 5 (manager) and 6 (DS).
     argocd.argoproj.io/sync-wave: "4"
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true
 spec:
   ttlSecondsAfterFinished: 600
   backoffLimit: 12

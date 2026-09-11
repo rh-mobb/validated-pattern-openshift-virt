@@ -16,8 +16,8 @@ setup() {
   [[ "$output" == *"name: kubevirt-hyperconverged"* ]]
   [[ "$output" == *"source: redhat-operators"* ]]
   [[ "$output" == *"kind: Application"* ]]
-  [[ "$output" == *"name: rwx-storage"* ]]
-  [[ "$output" == *"name: rwx-storage-gitops-controller"* ]]
+  [[ "$output" == *"name: virt-stack"* ]]
+  [[ "$output" == *"name: virt-stack-gitops-controller"* ]]
   [[ "$output" == *"name: cluster-admin"* ]]
   [[ "$output" == *"name: trident-from-metadata"* ]]
   [[ "$output" == *"tridentorchestrators"* ]]
@@ -46,6 +46,17 @@ setup() {
   grep -q 'networkFeatures: Standard' "${job}"
 }
 
+@test "bgp-cloud-connector kustomize and BuildConfig pin the same git SHA" {
+  kus="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/kustomization.yaml"
+  bc="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildconfig.yaml"
+  kref=$(sed -n 's|.*bgp-cloud-connector/config/default?ref=\([0-9a-f]\{7,\}\).*|\1|p' "${kus}")
+  bref=$(awk '/^[[:space:]]*ref:[[:space:]]*[0-9a-f]/ { print $2; exit }' "${bc}")
+  [ -n "${kref}" ]
+  [ "${kref}" = "${bref}" ]
+  ! grep -q 'ref=main' "${kus}"
+  ! grep -q 'ref: main' "${bc}"
+}
+
 @test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {
   job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
   grep -q 'networkInterfaceClientId' "${job}"
@@ -53,6 +64,20 @@ setup() {
   grep -q 'AZURE_CLIENT_ID' "${job}"
   grep -q 'rollout restart' "${job}"
   grep -q 'wait_for "AZURE_CLIENT_ID on manager pods"' "${job}"
+}
+
+@test "metadata jobs use sync-wave not Sync hook" {
+  bgp="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
+  trident="${BATS_TEST_DIRNAME}/../../gitops/operators/trident/from-metadata-job.yaml"
+  grep -q 'sync-wave: "4"' "${bgp}"
+  grep -q 'sync-wave: "4"' "${trident}"
+  ! grep -q 'hook: Sync' "${bgp}"
+  ! grep -q 'hook: Sync' "${trident}"
+}
+
+@test "gitops-bootstrap pre-applies openshift-gitops cluster-admin binding" {
+  script="${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  grep -q 'gitops-controller-rbac.yaml' "${script}"
 }
 
 @test "cleanup is idempotent when trident CRDs are absent" {

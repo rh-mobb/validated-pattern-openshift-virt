@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plant Argo Application rwx-storage and ConfigMaps anf-platform-metadata + bgp-platform-metadata.
+# Plant Argo Application virt-stack and ConfigMaps anf-platform-metadata + bgp-platform-metadata.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -77,6 +77,11 @@ export KUBECONFIG="${KUBECONFIG_PATH}"
 oc get ns openshift-gitops >/dev/null 2>&1 || die "openshift-gitops missing. Run installer make cluster.<name>.bootstrap first."
 oc whoami >/dev/null 2>&1 || die "Cannot reach the API."
 
+# cluster-admin for openshift-gitops-argocd-application-controller must exist
+# before virt-stack's first sync (ImageStream, TridentOrchestrator, …). Wave -1
+# inside the Application is not enough when ApplyOutOfSyncOnly retries skip it.
+oc apply -f "${GITOPS_DIR}/base/gitops-controller-rbac.yaml"
+
 metadata_cm | oc apply -f -
 render_app | oc apply -f -
-log "Applied rwx-storage Application, anf-platform-metadata, and bgp-platform-metadata"
+log "Applied virt-stack-gitops-controller, virt-stack Application, anf-platform-metadata, and bgp-platform-metadata"

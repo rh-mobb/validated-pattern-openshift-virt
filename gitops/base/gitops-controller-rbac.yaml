@@ -6,7 +6,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: rwx-storage-gitops-controller
+  name: virt-stack-gitops-controller
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 roleRef:
