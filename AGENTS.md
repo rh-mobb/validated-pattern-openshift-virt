@@ -123,7 +123,7 @@ Apply, destroy, and `trident-cleanup` must outlive the chat turn. A dead foregro
 ### Destroy
 
 1. Confirm subscription, RG, NetApp account, cluster name.
-2. `make cluster.<name>.cleanup` (or destroy, which runs it first): BGP CR drain, then `anf-virt` PVCs/PVs (wait timeout 180s). Azure volume delete is slower — leftover volumes 409 the pool; `az netappfiles volume delete`, wait until the list is empty, retry **this** destroy.
+2. `make cluster.<name>.cleanup` (or destroy, which runs it first): delete `virt-stack` Application, BGP CR drain, then `anf-virt` PVCs/PVs (wait timeout 180s). Azure volume delete is slower — leftover volumes 409 the pool; `az netappfiles volume delete`, wait until the list is empty, retry **this** destroy.
 3. Then `terraform destroy`.
 4. Then the installer `make cluster.<name>.destroy`.
 

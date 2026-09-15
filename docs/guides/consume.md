@@ -23,7 +23,7 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.ap
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy reverse: `make cluster.aro-virt.destroy` here (BGP CR drain + ANF cleanup then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
+Destroy reverse: `make cluster.aro-virt.destroy` here (`trident-cleanup.sh` deletes the `virt-stack` Application, drains BGP CRs, then ANF PVCs/PVs, then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
 
 GitOps: `make cluster.aro-virt.bootstrap` pre-applies `virt-stack-gitops-controller` (`cluster-admin` on `openshift-gitops-argocd-application-controller`) before the `virt-stack` Application — the binding also stays at sync-wave `-1` inside that App. Metadata Jobs (`trident-from-metadata`, `bgp-from-metadata`) are **sync-wave `4` resources**, not `hook: Sync` hooks, so wave `6` (`azure-nic-ip-forwarding`) waits for the Job ConfigMap. The Trident Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. BGP operator is an in-cluster build of [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) pinned to commit `2b6ad93989a2adfe4b52d4067f70a782aabd9a11` (`gitops/operators/bgp-cloud-connector` kustomize `config/default?ref=` and BuildConfig `spec.source.git.ref` must stay in lockstep); `bgp-from-metadata` stamps workload identity (sibling BGP MI) and `BGPCloudConfiguration` including `networkInterfaceClientID` (installer `cluster-api-azure`). Sample `BGPRouting` `virt` (`192.168.100.0/24`, namespace `virt`) is in `gitops/samples/cudn`; the operator creates the CUDN. Same Argo CD instance as the installer `cluster-config` Application.
 

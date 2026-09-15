@@ -85,3 +85,10 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Cleanup finished"* ]] || [[ "$output" == *"Trident CRDs absent"* ]] || [[ "$output" == *"BGPCloudConfiguration CRD absent"* ]]
 }
+
+@test "trident-cleanup pauses virt-stack GitOps before BGP drain" {
+  script="${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  grep -q 'virt-stack' "${script}"
+  grep -q 'applications.argoproj.io' "${script}"
+  ! grep -q 'mapfile' "${script}"
+}
