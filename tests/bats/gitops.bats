@@ -24,7 +24,8 @@ setup() {
   [[ "$output" == *"customresourcedefinitions"* ]]
   [[ "$output" == *"name: bgp-platform-metadata"* ]]
   [[ "$output" == *"name: bgp-from-metadata"* ]]
-  [[ "$output" == *"kind: BuildConfig"* ]]
+  [[ "$output" == *"kind: Build"* ]]
+  [[ "$output" == *"kind: BuildRun"* ]]
   [[ "$output" == *"name: operator"* ]]
   [[ "$output" == *"networkInterfaceClientId:"* ]]
 }
@@ -46,15 +47,32 @@ setup() {
   grep -q 'networkFeatures: Standard' "${job}"
 }
 
-@test "bgp-cloud-connector kustomize and BuildConfig pin the same git SHA" {
+@test "bgp-cloud-connector kustomize, Build, and BuildRun pin the same git SHA" {
   kus="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/kustomization.yaml"
-  bc="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildconfig.yaml"
+  build="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/build.yaml"
+  br="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildrun.yaml"
   kref=$(sed -n 's|.*bgp-cloud-connector/config/default?ref=\([0-9a-f]\{7,\}\).*|\1|p' "${kus}")
-  bref=$(awk '/^[[:space:]]*ref:[[:space:]]*[0-9a-f]/ { print $2; exit }' "${bc}")
+  bref=$(awk '/^[[:space:]]*revision:[[:space:]]*[0-9a-f]/ { print $2; exit }' "${build}")
+  brsuffix=$(sed -n 's|.*name: operator-\([0-9a-f]\{7,\}\).*|\1|p' "${br}")
   [ -n "${kref}" ]
+  [ -n "${brsuffix}" ]
   [ "${kref}" = "${bref}" ]
+  [[ "${kref}" == "${brsuffix}"* ]]
   ! grep -q 'ref=main' "${kus}"
-  ! grep -q 'ref: main' "${bc}"
+  ! grep -q 'revision: main' "${build}"
+}
+
+@test "bgp operator build mounts injected service CA for internal registry TLS" {
+  cm="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/service-ca-configmap.yaml"
+  build="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/build.yaml"
+  strategy="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildstrategy-buildah-heavy.yaml"
+  grep -q 'name: service-ca-bundle' "${cm}"
+  grep -q 'service.beta.openshift.io/inject-cabundle: "true"' "${cm}"
+  grep -q 'name: service-ca' "${build}"
+  grep -q 'name: service-ca-bundle' "${build}"
+  grep -q 'mountPath: /var/run/service-ca' "${strategy}"
+  grep -q 'creds-secrets/\*/.dockercfg' "${strategy}"
+  ! grep -q 'pushSecret:' "${build}"
 }
 
 @test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {

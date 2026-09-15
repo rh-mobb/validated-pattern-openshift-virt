@@ -52,10 +52,31 @@ metadata:
 spec:
   source: redhat-operators
 ---
-apiVersion: build.openshift.io/v1
-kind: BuildConfig
+apiVersion: shipwright.io/v1beta1
+kind: Build
 metadata:
   name: operator
+---
+apiVersion: shipwright.io/v1beta1
+kind: BuildRun
+metadata:
+  name: operator-2b6ad939
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-pipelines-operator
+  namespace: openshift-pipelines
+spec:
+  source: redhat-operators
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-builds-operator
+  namespace: openshift-builds
+spec:
+  source: redhat-operators
 ---
 apiVersion: batch/v1
 kind: Job
