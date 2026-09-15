@@ -11,12 +11,3 @@ spec:
     name: operator
   serviceAccount: shipwright-build
   timeout: 60m
-  stepResources:
-    - name: build-and-push
-      resources:
-        requests:
-          cpu: "2"
-          memory: 4Gi
-        limits:
-          cpu: "4"
-          memory: 8Gi

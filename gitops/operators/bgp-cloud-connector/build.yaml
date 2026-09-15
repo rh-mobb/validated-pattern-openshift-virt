@@ -14,8 +14,9 @@ spec:
       # Same SHA as kustomization.yaml config/default?ref= (not floating main).
       revision: 2b6ad93989a2adfe4b52d4067f70a782aabd9a11
   strategy:
-    kind: ClusterBuildStrategy
-    name: buildah
+    # Namespace BuildStrategy: CBS buildah defaults to 1 CPU / 2Gi; FIPS go build needs more.
+    kind: BuildStrategy
+    name: buildah-heavy
   paramValues:
     - name: dockerfile
       value: Dockerfile
@@ -25,12 +26,3 @@ spec:
     succeededLimit: 3
     failedLimit: 3
   timeout: 60m
-  stepResources:
-    - name: build-and-push
-      resources:
-        requests:
-          cpu: "2"
-          memory: 4Gi
-        limits:
-          cpu: "4"
-          memory: 8Gi
