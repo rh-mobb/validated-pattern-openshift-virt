@@ -62,7 +62,17 @@ setup() {
   ! grep -q 'revision: main' "${build}"
 }
 
-@test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {
+@test "bgp operator build mounts injected service CA for internal registry TLS" {
+  cm="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/service-ca-configmap.yaml"
+  build="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/build.yaml"
+  strategy="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildstrategy-buildah-heavy.yaml"
+  grep -q 'name: service-ca-bundle' "${cm}"
+  grep -q 'service.beta.openshift.io/inject-cabundle: "true"' "${cm}"
+  grep -q 'name: service-ca' "${build}"
+  grep -q 'name: service-ca-bundle' "${build}"
+  grep -q 'mountPath: /var/run/service-ca' "${strategy}"
+  grep -q 'cert-dir=' "${strategy}"
+}
   job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
   grep -q 'networkInterfaceClientId' "${job}"
   grep -q 'networkInterfaceClientID:' "${job}"

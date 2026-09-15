@@ -22,6 +22,10 @@ spec:
       value: Dockerfile
   output:
     image: image-registry.openshift-image-registry.svc:5000/openshift-bgp-cloud-connector/operator:dev
+  volumes:
+    - name: service-ca
+      configMap:
+        name: service-ca-bundle
   retention:
     succeededLimit: 3
     failedLimit: 3

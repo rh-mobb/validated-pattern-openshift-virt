@@ -1,0 +1,11 @@
+# Service serving CA for buildah TLS to the internal registry (push step).
+# The Service CA Operator injects service-ca.crt after the annotation is applied.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-ca-bundle
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    service.beta.openshift.io/inject-cabundle: "true"

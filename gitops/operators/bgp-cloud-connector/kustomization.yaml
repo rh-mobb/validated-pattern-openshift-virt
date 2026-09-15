@@ -5,6 +5,7 @@ resources:
   # and BuildRun metadata.name suffix (v1beta1 BGPCloudConfiguration/BGPRouting;
   # bump all three together).
   - https://github.com/openshift/bgp-cloud-connector/config/default?ref=2b6ad93989a2adfe4b52d4067f70a782aabd9a11
+  - service-ca-configmap.yaml
   - buildstrategy-buildah-heavy.yaml
   - build.yaml
   - buildrun.yaml

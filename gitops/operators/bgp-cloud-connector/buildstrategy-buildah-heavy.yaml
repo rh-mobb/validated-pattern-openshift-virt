@@ -247,11 +247,14 @@ spec:
         fi
       fi
 
+      certDir="/var/run/service-ca"
+
       # Building the image
       echo "[INFO] Building image ${image}"
       buildah --storage-driver=$(params.storage-driver) \
         bud "${budArgs[@]}" \
         --registries-conf=/tmp/registries.conf \
+        --cert-dir="${certDir}" \
         --tag="${image}" \
         --file="${dockerfile}" \
         .
@@ -260,6 +263,7 @@ spec:
       echo "[INFO] Pushing image ${image}"
       buildah --storage-driver=$(params.storage-driver) push \
         --digestfile='$(results.shp-image-digest.path)' \
+        --cert-dir="${certDir}" \
         --tls-verify="${tlsVerify}" \
         "${image}" \
         "docker://${image}"
@@ -307,8 +311,15 @@ spec:
     volumeMounts:
     - mountPath: /etc/pki/entitlement
       name: etc-pki-entitlement
+    - mountPath: /var/run/service-ca
+      name: service-ca
+      readOnly: true
     workingDir: $(params.shp-source-root)
   volumes:
   - emptyDir: {}
     name: etc-pki-entitlement
     overridable: true
+  - name: service-ca
+    overridable: true
+    configMap:
+      name: service-ca-bundle
