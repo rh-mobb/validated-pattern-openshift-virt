@@ -71,8 +71,11 @@ setup() {
   grep -q 'name: service-ca' "${build}"
   grep -q 'name: service-ca-bundle' "${build}"
   grep -q 'mountPath: /var/run/service-ca' "${strategy}"
-  grep -q 'creds-secrets/shipwright-registry-push/.dockerconfigjson' "${strategy}"
+  grep -q 'creds-secrets/\*/.dockercfg' "${strategy}"
+  ! grep -q 'pushSecret:' "${build}"
 }
+
+@test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {
   job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
   grep -q 'networkInterfaceClientId' "${job}"
   grep -q 'networkInterfaceClientID:' "${job}"

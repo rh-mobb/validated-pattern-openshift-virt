@@ -22,7 +22,6 @@ spec:
       value: Dockerfile
   output:
     image: image-registry.openshift-image-registry.svc:5000/openshift-bgp-cloud-connector/operator:dev
-    pushSecret: shipwright-registry-push
   volumes:
     - name: service-ca
       configMap:

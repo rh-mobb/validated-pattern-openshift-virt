@@ -248,12 +248,19 @@ spec:
       fi
 
       certDir="/var/run/service-ca"
-      # Tekton mounts pushSecret at creds-secrets/<name>/; merged .dockerconfigjson is not always present.
-      authFile="/tekton/creds-secrets/shipwright-registry-push/.dockerconfigjson"
-      if [ ! -f "${authFile}" ]; then
-        echo "[ERROR] Registry auth file ${authFile} not found"
+      # Tekton mounts the BuildRun SA dockercfg under creds-secrets/<secret>/ (suffix is OpenShift-managed).
+      authFile=""
+      for candidate in /tekton/creds-secrets/*/.dockerconfigjson /tekton/creds-secrets/*/.dockercfg; do
+        if [ -f "${candidate}" ]; then
+          authFile="${candidate}"
+          break
+        fi
+      done
+      if [ -z "${authFile}" ]; then
+        echo "[ERROR] No registry auth file under /tekton/creds-secrets/"
         exit 1
       fi
+      echo "[INFO] Using registry auth file ${authFile}"
       authArgs=(--authfile="${authFile}")
 
       # Building the image
