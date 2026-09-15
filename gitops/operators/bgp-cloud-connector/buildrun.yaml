@@ -1,0 +1,13 @@
+apiVersion: shipwright.io/v1beta1
+kind: BuildRun
+metadata:
+  name: operator-2b6ad939
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  build:
+    name: operator
+  serviceAccount: shipwright-build
+  timeout: 60m
