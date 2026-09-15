@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${ROOT_DIR}/.kube/config}"
 STORAGE_CLASS="${STORAGE_CLASS:-anf-virt}"
+GITOPS_APP_NAMESPACE="${GITOPS_APP_NAMESPACE:-openshift-gitops}"
+GITOPS_APP_NAME="${GITOPS_APP_NAME:-virt-stack}"
 
 log() { printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 die() {
@@ -18,10 +20,11 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'EOF'
 Usage: trident-cleanup.sh
 
-Deletes BGPCloudConfiguration / BGPRouting (so Azure Route Server peerings
-drain), then PVCs/PVs using STORAGE_CLASS (default anf-virt) and
-TridentBackendConfig anf-backend. Requires oc and a kubeconfig. Does not run
-terraform destroy.
+Deletes the sibling virt-stack Argo CD Application (so GitOps does not
+recreate BGP/Trident CRs), then BGPCloudConfiguration / BGPRouting (Azure
+Route Server peerings drain), PVCs/PVs using STORAGE_CLASS (default
+anf-virt), and TridentBackendConfig anf-backend. Requires oc and a
+kubeconfig. Does not run terraform destroy.
 EOF
   exit 0
 fi
@@ -29,6 +32,17 @@ fi
 command -v oc >/dev/null || die "oc is required"
 export KUBECONFIG="${KUBECONFIG_PATH}"
 oc whoami >/dev/null 2>&1 || die "Cannot reach the API (oc whoami failed). Set KUBECONFIG."
+
+if oc get crd applications.argoproj.io >/dev/null 2>&1; then
+  if oc -n "${GITOPS_APP_NAMESPACE}" get application "${GITOPS_APP_NAME}" >/dev/null 2>&1; then
+    log "Deleting Argo CD Application ${GITOPS_APP_NAME} (namespace ${GITOPS_APP_NAMESPACE}) so GitOps does not recreate BGP/Trident CRs during cleanup"
+    oc -n "${GITOPS_APP_NAMESPACE}" delete application "${GITOPS_APP_NAME}" --ignore-not-found --wait=false || true
+  else
+    log "Argo CD Application ${GITOPS_APP_NAME} absent; skipping GitOps pause"
+  fi
+else
+  log "Argo CD Application CRD absent; skipping GitOps pause"
+fi
 
 if oc get crd bgpcloudconfigurations.networking.openshift.io >/dev/null 2>&1; then
   log "Deleting BGPRouting and BGPCloudConfiguration so the operator can drop Azure peerings"
@@ -44,22 +58,20 @@ if ! oc get crd tridentbackendconfigs.trident.netapp.io >/dev/null 2>&1; then
 fi
 
 log "Deleting PVCs that use StorageClass ${STORAGE_CLASS}"
-mapfile -t pvcs < <(oc get pvc -A -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
-for line in "${pvcs[@]:-}"; do
+while IFS= read -r line; do
   [[ -z "${line}" ]] && continue
   ns="${line%% *}"
   name="${line##* }"
   log "Deleting pvc/${name} in ${ns}"
   oc -n "${ns}" delete pvc "${name}" --wait=true --timeout=180s || true
-done
+done < <(oc get pvc -A -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
 
 log "Deleting PVs still bound to ${STORAGE_CLASS}"
-mapfile -t pvs < <(oc get pv -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
-for pv in "${pvs[@]:-}"; do
+while IFS= read -r pv; do
   [[ -z "${pv}" ]] && continue
   log "Deleting pv/${pv}"
   oc delete pv "${pv}" --wait=true --timeout=180s || true
-done
+done < <(oc get pv -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
 
 if oc -n trident get tridentbackendconfig anf-backend >/dev/null 2>&1; then
   log "Deleting TridentBackendConfig anf-backend"
