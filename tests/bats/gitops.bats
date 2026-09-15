@@ -71,7 +71,7 @@ setup() {
   grep -q 'name: service-ca' "${build}"
   grep -q 'name: service-ca-bundle' "${build}"
   grep -q 'mountPath: /var/run/service-ca' "${strategy}"
-  grep -q 'cert-dir=' "${strategy}"
+  grep -q 'creds-secrets/shipwright-registry-push/.dockerconfigjson' "${strategy}"
 }
   job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
   grep -q 'networkInterfaceClientId' "${job}"

@@ -248,6 +248,13 @@ spec:
       fi
 
       certDir="/var/run/service-ca"
+      # Tekton mounts pushSecret at creds-secrets/<name>/; merged .dockerconfigjson is not always present.
+      authFile="/tekton/creds-secrets/shipwright-registry-push/.dockerconfigjson"
+      if [ ! -f "${authFile}" ]; then
+        echo "[ERROR] Registry auth file ${authFile} not found"
+        exit 1
+      fi
+      authArgs=(--authfile="${authFile}")
 
       # Building the image
       echo "[INFO] Building image ${image}"
@@ -255,6 +262,7 @@ spec:
         bud "${budArgs[@]}" \
         --registries-conf=/tmp/registries.conf \
         --cert-dir="${certDir}" \
+        "${authArgs[@]}" \
         --tag="${image}" \
         --file="${dockerfile}" \
         .
@@ -264,6 +272,7 @@ spec:
       buildah --storage-driver=$(params.storage-driver) push \
         --digestfile='$(results.shp-image-digest.path)' \
         --cert-dir="${certDir}" \
+        "${authArgs[@]}" \
         --tls-verify="${tlsVerify}" \
         "${image}" \
         "docker://${image}"
