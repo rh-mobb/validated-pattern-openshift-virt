@@ -1,0 +1,32 @@
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: operator
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  source:
+    type: Git
+    git:
+      url: https://github.com/openshift/bgp-cloud-connector.git
+      # Same SHA as kustomization.yaml config/default?ref= (not floating main).
+      revision: 2b6ad93989a2adfe4b52d4067f70a782aabd9a11
+  strategy:
+    # Namespace BuildStrategy: CBS buildah defaults to 1 CPU / 2Gi; FIPS go build needs more.
+    kind: BuildStrategy
+    name: buildah-heavy
+  paramValues:
+    - name: dockerfile
+      value: Dockerfile
+  output:
+    image: image-registry.openshift-image-registry.svc:5000/openshift-bgp-cloud-connector/operator:dev
+  volumes:
+    - name: service-ca
+      configMap:
+        name: service-ca-bundle
+  retention:
+    succeededLimit: 3
+    failedLimit: 3
+  timeout: 60m

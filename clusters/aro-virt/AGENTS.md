@@ -131,7 +131,7 @@ az netappfiles volume delete -g aro-virt-rg --account-name aro-virt-anf --pool-n
 | DV clone ~65% OOM | CDI ~600M | `cdiconfig` 4Gi; see CDI guide |
 | `disk.img: file exists` | Partial clone after OOM | Delete DV/tmp PVCs; retry |
 | Wrong tags/region | `TF_VAR_*` | Unset; same as installer A/B/C |
-| `virt-stack` Forbidden (ImageStream, TridentOrchestrator, …) | GitOps controller lacks `cluster-admin` on first sync | Bootstrap pre-applies `gitops-controller-rbac.yaml`; if skipped: `oc apply -f gitops/base/gitops-controller-rbac.yaml`, sync `virt-stack` |
+| `virt-stack` Forbidden (Shipwright Build, TridentOrchestrator, …) | GitOps controller lacks `cluster-admin` on first sync | Bootstrap pre-applies `gitops-controller-rbac.yaml`; if skipped: `oc apply -f gitops/base/gitops-controller-rbac.yaml`, sync `virt-stack` |
 | `azure-nic-ip-forwarding` missing ConfigMap | DS applied before `bgp-from-metadata` Job (legacy `hook: Sync`) | Use current GitOps (Job sync-wave `4`); `oc apply -f gitops/operators/bgp-cloud-connector/from-metadata-job.yaml` once |
 
 After a new live failure: add a row here. If operators would hit it, update consume.md and/or installer virt-stack troubleshooting in the same PR.

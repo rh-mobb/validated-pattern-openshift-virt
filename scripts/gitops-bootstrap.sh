@@ -78,7 +78,7 @@ oc get ns openshift-gitops >/dev/null 2>&1 || die "openshift-gitops missing. Run
 oc whoami >/dev/null 2>&1 || die "Cannot reach the API."
 
 # cluster-admin for openshift-gitops-argocd-application-controller must exist
-# before virt-stack's first sync (ImageStream, TridentOrchestrator, …). Wave -1
+# before virt-stack's first sync (Shipwright Build, TridentOrchestrator, …). Wave -1
 # inside the Application is not enough when ApplyOutOfSyncOnly retries skip it.
 oc apply -f "${GITOPS_DIR}/base/gitops-controller-rbac.yaml"
 
