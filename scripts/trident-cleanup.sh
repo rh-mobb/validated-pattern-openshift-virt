@@ -65,7 +65,7 @@ if [[ -z "$found" ]]; then
   exit 0
 fi
 claims_json="$(oc get pvc -A -o json)"
-claims="$(jq -ce --arg sc "$STORAGE_CLASS" '[.items[] | select(.spec.storageClassName == $sc) | {namespace: .metadata.namespace, name: .metadata.name}]' <<<"$claims_json")"
+claims="$(jq -ce --arg sc "$STORAGE_CLASS" '[.items[] | select(.spec.storageClassName == $sc) | {namespace: .metadata.namespace, name: .metadata.name, owners: (.metadata.ownerReferences // [])}]' <<<"$claims_json")"
 pods="$(oc get pods -A -o json)"
 consumers="$(jq -r --argjson claims "$claims" '
   .items[] as $pod | select(any($pod.spec.volumes[]?;
@@ -73,6 +73,32 @@ consumers="$(jq -r --argjson claims "$claims" '
       .namespace == $pod.metadata.namespace and .name == $name))) |
   "\($pod.metadata.namespace)/\($pod.metadata.name)"' <<<"$pods")"
 [[ -z "$consumers" ]] || die "Stop storage consumers before cleanup: ${consumers}"
+# Retained DataVolumes can recreate claims after a DataImportCron is removed.
+# Resolve only actual owner UIDs of this storage class's claims; never match by name alone.
+dv_refs="$(jq -c '[.[] as $claim | $claim.owners[]? | select(.kind == "DataVolume") |
+  {namespace: $claim.namespace, name: .name, uid: .uid}] | unique_by([.namespace, .name, .uid])' <<<"$claims")"
+if [[ "$(jq 'length' <<<"$dv_refs")" -gt 0 ]]; then
+  dvs="$(oc get datavolumes.cdi.kubevirt.io -A -o json)"
+  owned_dvs="$(jq -ce --argjson refs "$dv_refs" '[
+    $refs[] as $ref | .items[] |
+    select(.metadata.namespace == $ref.namespace and .metadata.name == $ref.name) |
+    if .metadata.uid != $ref.uid then error("DataVolume ownership changed; refusing storage drain") else . end
+  ]' <<<"$dvs")"
+  controllers="$(jq -r '.[] | select(.metadata.deletionTimestamp == null) |
+    select(any(.metadata.ownerReferences[]?; .kind == "VirtualMachine" or .kind == "VirtualMachinePool")) |
+    "\(.metadata.namespace)/\(.metadata.name)"' <<<"$owned_dvs")"
+  [[ -z "$controllers" ]] || die "Remove VM controllers owning DataVolumes before cleanup: ${controllers}"
+  dv_rows="$(jq -r '.[] | [.metadata.namespace, .metadata.name, .metadata.uid] | @tsv' <<<"$owned_dvs")"
+  while IFS=$'\t' read -r ns name uid; do
+    [[ -z "$ns" ]] && continue
+    log "Deleting DataVolume producer ${ns}/${name}"
+    # Server-side preconditions protect replacements created after inventory.
+    # A conflict (or any API failure) stops the drain before deleting claims.
+    options="$(jq -cn --arg uid "$uid" '{apiVersion:"v1", kind:"DeleteOptions", preconditions:{uid:$uid}}')"
+    oc delete --raw "/apis/cdi.kubevirt.io/v1beta1/namespaces/${ns}/datavolumes/${name}" -f - <<<"$options"
+    oc -n "$ns" wait --for=delete "datavolume/${name}" --timeout=180s
+  done <<<"$dv_rows"
+fi
 claim_rows="$(jq -r '.[] | [.namespace, .name] | @tsv' <<<"$claims")"
 while IFS=$'\t' read -r ns name; do
   [[ -z "$ns" ]] && continue

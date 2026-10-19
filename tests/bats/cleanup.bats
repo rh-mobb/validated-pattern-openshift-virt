@@ -85,3 +85,41 @@ run_make() {
   grep -q 'terraform.*destroy' "$CLEANUP_CALLS"
   ! grep -q 'az \|delete pvc\|patch hyperconverged' "$CLEANUP_CALLS"
 }
+
+@test "drain removes matching DataVolume producers before PVCs" {
+  export CLEANUP_SCENARIO=dv_catalog
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -eq 0 ]
+  dv=$(awk '/delete --raw.*datavolumes/ {print NR}' "$CLEANUP_CALLS")
+  pvc=$(awk '/delete pvc/ {print NR}' "$CLEANUP_CALLS")
+  [ "$dv" -lt "$pvc" ]
+}
+
+@test "active consumers block DataVolume deletion too" {
+  export CLEANUP_SCENARIO=dv_consumer
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -ne 0 ]
+  ! grep -q 'delete --raw.*datavolumes' "$CLEANUP_CALLS"
+}
+
+@test "changed DataVolume ownership stops storage deletion" {
+  export CLEANUP_SCENARIO=dv_changed
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -ne 0 ]
+  ! grep -q 'delete --raw.*datavolumes\|delete pvc' "$CLEANUP_CALLS"
+}
+
+@test "retained VM controllers block DataVolume deletion" {
+  export CLEANUP_SCENARIO=dv_controller
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -ne 0 ]
+  ! grep -q 'delete --raw.*datavolumes\|delete pvc' "$CLEANUP_CALLS"
+}
+
+@test "DataVolume replacement at deletion time fails closed before PVC deletion" {
+  export CLEANUP_SCENARIO=dv_replaced_at_delete
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"UID precondition failed"* ]]
+  ! grep -q 'delete pvc' "$CLEANUP_CALLS"
+}

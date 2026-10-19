@@ -4,6 +4,11 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Retained import producers
+
+- Remove retained DataVolumes owning `anf-virt` claims before PVC drain, after rejecting Pod consumers and retained VM controllers.
+- Enforce DataVolume UID preconditions at deletion so replacements cannot be removed from a stale inventory.
+
 ### Guarded ANF teardown
 
 - Add `.anf-preview` and `.anf-cleanup` targets scoped to the managed ANF pool in per-profile Terraform state, including recovery when failed destroy removed outputs.

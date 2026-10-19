@@ -48,7 +48,7 @@ Do not add a public IP, public PaaS data plane, or internet listener without a n
 
 Trident provisions ANF **volumes**. They are not in Terraform state. The Make cleanup/destroy workflow runs `scripts/trident-cleanup.sh` to pause
 GitOps, disable common boot-image imports, reject active storage consumers, and
-drain BGP plus PVCs/PVs. `scripts/anf-volume-cleanup.py` then checks the exact pool
+drain BGP, matching DataVolume producers, and PVCs/PVs. `scripts/anf-volume-cleanup.py` then checks the exact pool
 from the managed pool ARM ID in per-profile state and waits for CSI deletion. Direct leftover-volume deletion
 requires an exact resource-group/account/pool confirmation. The pool must be empty
 before the Trident backend and Terraform-managed identities are removed. See

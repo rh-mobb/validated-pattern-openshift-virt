@@ -98,6 +98,8 @@ OpenShift 4.21.8+ OVN wrong-node egress is assumed (installer example is 4.22). 
 make cluster.aro-virt.destroy
 ```
 
+Cleanup also removes DataVolumes proven by PVC owner UID to produce this storage class; retained VM controllers must be removed first.
+
 Cleanup now disables common boot-image imports and blocks on remaining
 DataImportCrons or Pod consumers before draining PVCs/PVs. The Azure gate must verify
 an empty pool before backend and identity teardown. Preview before confirming direct

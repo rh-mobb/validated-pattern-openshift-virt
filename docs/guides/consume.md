@@ -38,6 +38,12 @@ GitOps Application, disables CNV common boot-image imports, waits for DataImport
 to disappear, drains BGP, and deletes `anf-virt` PVCs/PVs. Stop VMs, Pods and their
 owning controllers first; cleanup reports remaining Pod consumers and refuses to
 delete their claims. Custom DataImportCrons must also be stopped before drain.
+After the consumer check, cleanup also removes DataVolumes identified by the exact
+owner UIDs of this storage class's PVCs, before deleting the claims. This prevents
+retained catalog DataVolumes from recreating PVCs after DataImportCrons disappear.
+Deletion uses an API-enforced UID precondition, so a replacement DataVolume is
+protected even if it appears after inventory. A changed UID or a retained
+VM/VM-pool controller blocks deletion.
 API, authorization, import-drain or PVC-deletion errors stop teardown.
 
 The Azure gate waits up to 600 seconds for CSI to remove volumes while the Trident
