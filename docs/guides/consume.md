@@ -1,6 +1,6 @@
 # Consume modes
 
-Canonical **two-checkout e2e** (installer jump-key → apply → kubeconfig → external-auth → bootstrap → platform → this apply → this bootstrap, plus verify and destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/). Agent done-when: [`clusters/aro-virt/AGENTS.md`](../../clusters/aro-virt/AGENTS.md).
+Canonical **two-checkout e2e** (installer jump-key → apply → kubeconfig → external-auth → bootstrap → platform → this apply → this bootstrap, plus verify and destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/). Agent done-when: [`clusters/aro-virt/AGENTS.md`](https://github.com/rh-mobb/validated-pattern-openshift-virt/blob/main/clusters/aro-virt/AGENTS.md).
 
 ## Second IaC run (canonical)
 
@@ -46,3 +46,55 @@ module "netapp" {
 ```
 
 Pin `ref` to a tag. Still install sibling `gitops/` (Argo Application: Trident + OpenShift Virtualization) and run `trident-cleanup.sh` before destroying the module. The ARO HCP installer root does **not** call this module.
+
+## Classic MIWI attachment notes
+
+Use an installer contract with `machine_api_client_id` for managed-RG NIC operations.
+Keep the BGP identity scoped to Route Server operations and reuse installer Argo CD.
+
+The GitOps layout separates shared resources from platform and cluster placement:
+
+- `gitops/base`: shared Trident, CNV, BGP and sample CUDN resources.
+- `gitops/overlays/azure-hcp`: forces CNV operators onto workers, preserving HCP behavior.
+- `gitops/overlays/azure-classic`: uses the operators' default control-plane placement.
+- `gitops/overlays/azure`: compatibility alias for `azure-hcp`.
+- `gitops/profiles/aro-classic-virt`: example Classic overlay selecting `pool=np-virt`
+  for virt workloads and tolerating `workload=virtualization:NoSchedule`. HCO infra
+  remains on untainted workers. Adjust this profile for your actual labels and taints.
+
+`GITOPS_PLATFORM` accepts `classic` or `hcp` (default `hcp` for existing callers).
+`GITOPS_PATH` overrides the selected directory for a committed cluster profile; the
+profile's Kustomization chooses its platform base. Bootstrap validates the local path
+and uses it both in dry-run and in the Argo Application. It does not infer the platform
+from the presence of worker nodes. Platform identity selection stays in Terraform.
+
+```bash
+# Generic Classic placement, without this example's pool selectors:
+GITOPS_PLATFORM=classic make cluster.aro-classic-virt.bootstrap
+
+# Example tainted virt pool; test an already-pushed branch:
+GITOPS_PLATFORM=classic \
+GITOPS_PATH=gitops/profiles/aro-classic-virt \
+GITOPS_REVISION=feat/classic-gitops-overlays \
+make cluster.aro-classic-virt.bootstrap
+```
+
+Create the attachment's local tfvars/state and set the installer kubeconfig as above
+before bootstrap. `GITOPS_REPO` can point at a fork; Argo must be able to read the
+chosen repository and revision. Copy the example profile into your own committed
+profile when labels, taints or placement differ.
+
+The shared NIC-forwarding DaemonSet selects Linux workers and tolerates pool taints.
+The shared BGP BuildConfig uses only ConfigChange: OpenShift discards an empty
+ImageChange trigger, which otherwise causes persistent Argo drift.
+
+When migrating an Application that already has inline `spec.source.kustomize.patches`,
+first represent every override in the selected Git profile and compare the render.
+Then remove the old inline patches. Bootstrap does not discard existing inline
+customizations automatically. The 2026-10-19 Classic test originally used those
+patches before moving to the maintained profile.
+
+Established BGP and an active effective route do not prove external CUDN connectivity.
+A Classic worker host can select OVN policy-routing table 1053 instead of the Azure
+path. Use a separate private VNet host for the Route Server dataplane check; do not
+interpret that worker-host probe's result as an external routing result.

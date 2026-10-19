@@ -6,6 +6,11 @@ Instructions for AI agents working in this repository.
 
 Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI), **OpenShift Virtualization**, and **CUDN BGP** (Azure Route Server + in-cluster [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector)). Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, `RouteServerSubnet` + Route Server, and Trident/BGP identities. GitOps installs Trident, kubevirt-hyperconverged, and builds the BGP operator from [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) commit `2b6ad93989a2adfe4b52d4067f70a782aabd9a11` (kustomize remote + BuildConfig `ref`; bump both together). Cleanup drains BGP CRs then Trident/ANF volumes.
 
+GitOps bootstrap accepts `GITOPS_PLATFORM=classic|hcp` (default HCP) and a repository-relative
+`GITOPS_PATH` for a committed profile. Keep shared fixes in the base, platform operator
+placement in the platform overlays, and pool selectors/tolerations in profiles.
+Run `make gitops-test` with kubectl or oc and `pip install -r requirements-test.txt`.
+
 This is **not** an OpenShift cluster installer. The cluster lives in the sibling **ARO HCP** pattern: [`rh-mobb/validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp). Do not create an HCP cluster here. Do not add AWS/GCP providers beyond empty module stubs until those slices exist.
 
 ## Sibling: ARO HCP installer
@@ -45,7 +50,7 @@ When sources disagree:
 - **`modules/azure` is the product.** `terraform/` is a thin root (providers, backend, platform ingest → `module "azure"`). Do not pile resources into the root.
 - **Network privacy:** RFC1918 or Azure Private Endpoints only. ANF NFS via the delegated subnet is compliant (not a Private Endpoint). If a path cannot comply, add a row to the exception table in [`docs/architecture.md`](docs/architecture.md#network-privacy) **in the same change**.
 - **Do not** create ANF volumes in Terraform. Trident provisions them. Cleanup script then `terraform destroy`.
-- **BGP NIC writes:** sibling MI is Route Server BGP connections only. `networkInterfaceClientID` is installer `cluster_api_azure_client_id`. Do not add a customer MI for managed-RG NIC write.
+- **BGP NIC writes:** sibling MI is Route Server BGP connections only. `networkInterfaceClientID` is installer `cluster_api_azure_client_id` (HCP) or `machine_api_client_id` (Classic). Do not add a customer MI for managed-RG NIC write.
 - **Do not** install a second Argo CD. Consume `openshift-gitops` from the installer bootstrap.
 - **Do not** steal the cluster default StorageClass (`managed-csi`) unless an explicit flag says so.
 - **Do not** use Azure Files for VM disks.

@@ -4,6 +4,14 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Classic and HCP GitOps overlays
+
+- Add shared GitOps base consumption through `azure-classic` and `azure-hcp` overlays; retain `azure` as an HCP compatibility alias.
+- Add a Classic virt example profile with pool placement and taint tolerations, selected through bootstrap `GITOPS_PLATFORM` / `GITOPS_PATH` and branch revision controls.
+- Accept Classic `machine_api_client_id` for NIC operations while retaining HCP `cluster_api_azure_client_id` support.
+- Restrict the NIC-forwarding agent to workers and remove the empty BGP image-change trigger that caused Argo drift.
+- Document Classic attachment requirements and validation, with real overlay-render checks in the test gate.
+
 ### Added
 
 - Azure Route Server (`RouteServerSubnet` + Standard PIP) and BGP UAMI in `modules/azure`, consumed from installer `platform.json` (`route_server_subnet_prefix`, `bgp_router` pools, `cluster_api_azure_client_id`)

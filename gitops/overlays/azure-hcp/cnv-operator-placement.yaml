@@ -1,0 +1,10 @@
+# HCP exposes workers only; retain the existing operator placement override.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+spec:
+  config:
+    nodeSelector:
+      node-role.kubernetes.io/worker: ""

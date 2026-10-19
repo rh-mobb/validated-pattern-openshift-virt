@@ -135,3 +135,24 @@ az netappfiles volume delete -g aro-virt-rg --account-name aro-virt-anf --pool-n
 | `azure-nic-ip-forwarding` missing ConfigMap | DS applied before `bgp-from-metadata` Job (legacy `hook: Sync`) | Use current GitOps (Job sync-wave `4`); `oc apply -f gitops/operators/bgp-cloud-connector/from-metadata-job.yaml` once |
 
 After a new live failure: add a row here. If operators would hit it, update consume.md and/or installer virt-stack troubleshooting in the same PR.
+
+### Classic attachment findings (2026-10-19)
+
+The separate `aro-classic-virt` attachment used Classic `machine_api_client_id` and
+initially Argo inline Kustomize patches. The maintained
+`gitops/profiles/aro-classic-virt` profile replaces those patches; bootstrap with
+`GITOPS_PLATFORM=classic GITOPS_PATH=gitops/profiles/aro-classic-virt`. Preserve HCP
+behavior for this `aro-virt` profile.
+
+| Symptom | Cause / evidence | Action |
+|---------|------------------|--------|
+| Classic `virt-operator` Pending | Subscription forces worker selector while CSV requires control-plane affinity | Remove the HCP-only Subscription selector in Classic-specific GitOps configuration; keep workload placement/tolerations separate |
+| BGP BuildConfig keeps Argo OutOfSync after a successful build | API removes its empty ImageChange trigger | Use ConfigChange only unless an actual image-change source is configured |
+| Default-worker host HTTP to CUDN times out despite Established BGP | Approved lookup selected ovn-k8s-mp1/table 1053, bypassing Route Server | Do not call this external dataplane evidence; use a separate private VNet probe host |
+
+CNV Healthy, Trident backend Bound, cross-node RWX shared-file access, a Running/Ready
+VMI with an RWX data disk, and all four speaker-to-Route-Server sessions were verified.
+A separate private VNet VM at 10.0.5.4 successfully reached HTTP endpoints on both
+speaker and non-speaker CUDN Pods; both preserved the original source IP. Its NIC had
+an active 192.168.100.0/24 route through the two speakers.
+No guest networking, migration or worker replacement result is implied.

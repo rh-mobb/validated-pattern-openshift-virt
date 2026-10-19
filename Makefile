@@ -7,13 +7,13 @@ SCRIPTS := $(ROOT_DIR)/scripts
 ARO_HCP_ROOT ?=
 ARO_HCP_PROFILE ?=
 
-.PHONY: help fmt lint test docs-venv docs-preview docs-build cluster.%
+.PHONY: help fmt lint test docs-venv docs-preview docs-build gitops-test cluster.%
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-28s %s\n", $$1, $$2}'
 	@echo "Cluster operations: make cluster.<name>.<operation>"
 	@echo "  init plan apply destroy cleanup bootstrap"
-	@echo "Set ARO_HCP_ROOT to the installer checkout to refresh platform.json before apply."
+	@echo "Set ARO_HCP_ROOT to the installer checkout (aro-hcp or aro-classic) to refresh platform.json before apply."
 
 cluster.%:
 	@CLUSTER_PROFILE=$$(echo "$@" | cut -d'.' -f2); \
@@ -40,7 +40,10 @@ lint: ## Validate Terraform
 	terraform -chdir=$(TF_DIR) validate
 	@command -v shellcheck >/dev/null && (cd $(SCRIPTS) && shellcheck --external-sources *.sh) || echo "shellcheck not installed; skipping"
 
-test: lint ## terraform test + bats
+gitops-test: ## Render GitOps overlays and verify scheduling contracts
+	python3 tests/test_gitops.py
+
+test: lint gitops-test ## terraform test + bats
 	terraform -chdir=$(ROOT_DIR)/modules/azure test
 	@if command -v bats >/dev/null; then bats $(ROOT_DIR)/tests/bats; else echo "bats not installed; skipping"; fi
 
