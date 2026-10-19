@@ -23,7 +23,64 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.ap
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy reverse: `make cluster.aro-virt.destroy` here (`trident-cleanup.sh` deletes the `virt-stack` Application, drains BGP CRs, then ANF PVCs/PVs, then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
+## Storage cleanup and full teardown
+
+Use the attachment's Make targets so the managed pool ARM ID in per-profile state binds
+Azure operations to the correct subscription, resource group, ANF account and pool:
+
+```bash
+make cluster.aro-virt.anf-preview
+make cluster.aro-virt.destroy
+```
+
+Preview lists volumes without changing Kubernetes or Azure. Destroy removes the
+GitOps Application, disables CNV common boot-image imports, waits for DataImportCrons
+to disappear, drains BGP, and deletes `anf-virt` PVCs/PVs. Stop VMs, Pods and their
+owning controllers first; cleanup reports remaining Pod consumers and refuses to
+delete their claims. Custom DataImportCrons must also be stopped before drain.
+API, authorization, import-drain or PVC-deletion errors stop teardown.
+
+The Azure gate waits up to 600 seconds for CSI to remove volumes while the Trident
+backend and identities still exist. If volumes remain, it stops before Terraform
+destroy. A missing PVC is not proof that the remaining volume's data is disposable.
+For an explicitly confirmed full teardown, review the preview and supply the exact
+`resource-group/account/pool` confirmation printed by it:
+
+```bash
+ANF_DELETE_CONFIRM=aro-virt-rg/aro-virt-anf/aro-virt-anf-pool \
+  make cluster.aro-virt.destroy
+```
+
+Confirmed cleanup deletes only volume IDs inside that exact Terraform-managed pool,
+then waits for an empty Azure inventory. It does not force-break replication or
+remove Kubernetes finalizers. Only after the pool is empty does it remove the
+Trident backend and run Terraform destroy of the pool, account, subnet and identities.
+Read-only scope and account validation runs before Kubernetes drain. The active Azure
+subscription must match the managed pool ID; inventory failures
+are errors, never an empty-pool result. Azure CLI, Python 3, jq, Terraform and oc are
+required for the complete workflow.
+
+For recovery after a previous partial destroy has already removed Trident or its
+identity, use the Azure-only gate after reviewing its inventory:
+
+```bash
+make cluster.aro-virt.anf-preview
+ANF_DELETE_CONFIRM=aro-virt-rg/aro-virt-anf/aro-virt-anf-pool \
+  make cluster.aro-virt.anf-cleanup
+# Then retry the sibling destroy, after any remaining Kubernetes drain issues are resolved.
+```
+
+`anf-cleanup` defaults to waiting without direct deletion unless the confirmation
+matches. `ANF_VOLUME_WAIT_SECONDS` controls each wait window (default 600, maximum
+7200; zero performs immediate checks). Azure errors or volumes still present after
+the final wait cause a nonzero exit. Scope comes from the exact `module.azure.azurerm_netapp_pool.this` ARM ID in state,
+so recovery also works when a failed destroy has already removed all outputs. Invalid
+or ambiguous state stops cleanup. If state proves there is no managed ANF pool left,
+the workflow skips storage drain and lets Terraform finish other resources; it does
+not claim to have inventoried Azure or delete any untracked pools. There is no fallback
+to guessed resource names or subscription-wide deletion.
+
+Destroy reverse: `make cluster.aro-virt.destroy` here (Kubernetes drain, Azure volume gate, backend removal, then Terraform). Then installer destroy.
 
 GitOps: `make cluster.aro-virt.bootstrap` pre-applies `virt-stack-gitops-controller` (`cluster-admin` on `openshift-gitops-argocd-application-controller`) before the `virt-stack` Application — the binding also stays at sync-wave `-1` inside that App. Metadata Jobs (`trident-from-metadata`, `bgp-from-metadata`) are **sync-wave `4` resources**, not `hook: Sync` hooks, so wave `6` (`azure-nic-ip-forwarding`) waits for the Job ConfigMap. The Trident Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. BGP operator is an in-cluster build of [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) pinned to commit `2b6ad93989a2adfe4b52d4067f70a782aabd9a11` (`gitops/operators/bgp-cloud-connector` kustomize `config/default?ref=` and BuildConfig `spec.source.git.ref` must stay in lockstep); `bgp-from-metadata` stamps workload identity (sibling BGP MI) and `BGPCloudConfiguration` including `networkInterfaceClientID` (installer `cluster-api-azure`). Sample `BGPRouting` `virt` (`192.168.100.0/24`, namespace `virt`) is in `gitops/samples/cudn`; the operator creates the CUDN. Same Argo CD instance as the installer `cluster-config` Application.
 

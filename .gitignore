@@ -45,3 +45,6 @@ site/
 # Secrets
 pull-secret.txt
 *.whl
+
+# Python test/import artifacts
+__pycache__/

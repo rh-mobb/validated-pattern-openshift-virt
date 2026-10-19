@@ -98,15 +98,20 @@ OpenShift 4.21.8+ OVN wrong-node egress is assumed (installer example is 4.22). 
 make cluster.aro-virt.destroy
 ```
 
-Cleanup deletes BGP CRs then `anf-virt` PVCs (wait timeout **180s**). Azure volume delete is slower; leftover volumes 409 the pool.
-
-If `CannotDeleteResource` / `InUseSubnetCannotBeDeleted`:
+Cleanup now disables common boot-image imports and blocks on remaining
+DataImportCrons or Pod consumers before draining PVCs/PVs. The Azure gate must verify
+an empty pool before backend and identity teardown. Preview before confirming direct
+leftover-volume deletion:
 
 ```bash
-az netappfiles volume list -g aro-virt-rg --account-name aro-virt-anf --pool-name aro-virt-anf-pool -o table
-az netappfiles volume delete -g aro-virt-rg --account-name aro-virt-anf --pool-name aro-virt-anf-pool --name <pvc-…> --yes
-# wait until the list is empty, then retry destroy
+make cluster.aro-virt.anf-preview
+ANF_DELETE_CONFIRM=aro-virt-rg/aro-virt-anf/aro-virt-anf-pool make cluster.aro-virt.destroy
 ```
+
+If an earlier partial destroy removed Trident's identity, use the same confirmation
+with `.anf-cleanup` for Azure-only recovery, then resolve any Kubernetes drain errors
+and retry this sibling's destroy. Never overlap Terraform/ARM mutations. Inventory
+errors and incomplete deletes must stop teardown, not be treated as absence.
 
 **Done when:** sibling Terraform state empty; no ANF account/pool/netapp subnet/Route Server. **Then** installer `make cluster.aro-virt.destroy`. Do not start installer destroy while this stack still owns the delegated subnet.
 
@@ -126,7 +131,7 @@ az netappfiles volume delete -g aro-virt-rg --account-name aro-virt-anf --pool-n
 | Symptom | Likely cause | Action |
 |---------|----------------|--------|
 | `oc whoami` fails | Empty sibling kubeconfig | `KUBECONFIG_PATH` = installer `.kube/config` |
-| Destroy 409 on pool / subnet in use | PVC wait 180s < ANF delete | `az netappfiles volume delete`, wait, retry **this** destroy |
+| Destroy 409 on pool / subnet in use | PVC wait 180s < ANF delete | Preview `.anf-preview`, explicitly confirm direct leftovers with `.anf-cleanup`, wait empty, retry **this** destroy |
 | Jump → `np-1` CUDN fails | NIC forwarding false | DS logs; CAPI client ID; `HOME=/tmp` |
 | DV clone ~65% OOM | CDI ~600M | `cdiconfig` 4Gi; see CDI guide |
 | `disk.img: file exists` | Partial clone after OOM | Delete DV/tmp PVCs; retry |
@@ -149,6 +154,7 @@ behavior for this `aro-virt` profile.
 | Classic `virt-operator` Pending | Subscription forces worker selector while CSV requires control-plane affinity | Remove the HCP-only Subscription selector in Classic-specific GitOps configuration; keep workload placement/tolerations separate |
 | BGP BuildConfig keeps Argo OutOfSync after a successful build | API removes its empty ImageChange trigger | Use ConfigChange only unless an actual image-change source is configured |
 | Default-worker host HTTP to CUDN times out despite Established BGP | Approved lookup selected ovn-k8s-mp1/table 1053, bypassing Route Server | Do not call this external dataplane evidence; use a separate private VNet probe host |
+| ANF pool delete fails after PVC cleanup | CNV common boot-image imports recreate PVCs/volumes during drain | Use the current Make cleanup/destroy drain and Azure gate; stop consumers first, preview with .anf-preview, and explicitly confirm any direct leftover deletion. For a partial destroy with a missing Trident identity, use .anf-cleanup before retrying; never overlap Terraform operations |
 
 CNV Healthy, Trident backend Bound, cross-node RWX shared-file access, a Running/Ready
 VMI with an RWX data disk, and all four speaker-to-Route-Server sessions were verified.

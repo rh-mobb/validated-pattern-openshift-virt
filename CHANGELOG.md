@@ -4,6 +4,13 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Guarded ANF teardown
+
+- Add `.anf-preview` and `.anf-cleanup` targets scoped to the managed ANF pool in per-profile Terraform state, including recovery when failed destroy removed outputs.
+- Require explicit resource-group/account/pool confirmation for direct leftover-volume deletion, and verify an empty Azure pool before removing the Trident backend or Terraform-managed identities.
+- Disable common boot-image imports, reject active Pod consumers, and stop teardown on Kubernetes or Azure drain errors.
+- Cover deletion scoping, confirmation, partial-destroy retries and Make ordering with mocked tests; document the workflow and recovery targets.
+
 ### Classic and HCP GitOps overlays
 
 - Add shared GitOps base consumption through `azure-classic` and `azure-hcp` overlays; retain `azure` as an HCP compatibility alias.

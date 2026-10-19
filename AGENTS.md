@@ -90,7 +90,7 @@ export KUBECONFIG_PATH="${ARO_HCP_ROOT}/.kube/config"
 # unset TF_VAR_* in this shell
 ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.apply
 make cluster.aro-virt.bootstrap
-make cluster.aro-virt.destroy              # cleanup + terraform destroy; leftover ANF volumes: az delete, retry
+make cluster.aro-virt.destroy              # guarded cleanup + Terraform destroy; preview leftover volumes first
 ```
 
 In-tree: caller adds `module "netapp" { source = "git::https://github.com/rh-mobb/validated-pattern-openshift-virt.git//modules/azure?ref=<tag>" }`. They still need GitOps + cleanup. Pin `ref` to a tag.
@@ -128,8 +128,14 @@ Apply, destroy, and `trident-cleanup` must outlive the chat turn. A dead foregro
 ### Destroy
 
 1. Confirm subscription, RG, NetApp account, cluster name.
-2. `make cluster.<name>.cleanup` (or destroy, which runs it first): delete `virt-stack` Application, BGP CR drain, then `anf-virt` PVCs/PVs (wait timeout 180s). Azure volume delete is slower — leftover volumes 409 the pool; `az netappfiles volume delete`, wait until the list is empty, retry **this** destroy.
-3. Then `terraform destroy`.
+2. Stop storage consumers and run `.anf-preview`. `make cluster.<name>.cleanup`
+   removes Argo, disables common boot-image imports, waits for DataImportCrons, drains
+   BGP and PVCs/PVs, then waits for an empty Azure pool before removing the backend.
+   Direct leftover deletion requires `ANF_DELETE_CONFIRM=<rg>/<account>/<pool>`.
+   `.anf-cleanup` is the Azure-only recovery target after a partial destroy; do not
+   overlap it with another ARM mutation.
+3. `make cluster.<name>.destroy` runs that cleanup before Terraform removes the pool,
+   subnet and identities. Errors stop the sequence.
 4. Then the installer `make cluster.<name>.destroy`.
 
 ### Do not

@@ -65,7 +65,7 @@ EOF
     ;;
   get)
     if [[ "$*" == *"crd tridentbackendconfigs"* || "$*" == *"crd bgpcloudconfigurations"* ]]; then
-      exit 1
+      exit 0
     fi
     echo "mock oc get $*"
     ;;

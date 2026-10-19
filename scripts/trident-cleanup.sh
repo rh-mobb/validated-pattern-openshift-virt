@@ -1,81 +1,88 @@
 #!/usr/bin/env bash
-# Drain Trident PVs / ANF volumes so terraform destroy can delete the pool.
-# Safe to re-run. Does not terraform destroy.
+# Drain in-cluster resources while Trident and BGP identities still exist.
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${ROOT_DIR}/.kube/config}"
 STORAGE_CLASS="${STORAGE_CLASS:-anf-virt}"
 GITOPS_APP_NAMESPACE="${GITOPS_APP_NAMESPACE:-openshift-gitops}"
 GITOPS_APP_NAME="${GITOPS_APP_NAME:-virt-stack}"
-
 log() { printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 die() {
   log "ERROR: $*"
   exit 1
 }
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  cat <<'EOF'
-Usage: trident-cleanup.sh
-
-Deletes the sibling virt-stack Argo CD Application (so GitOps does not
-recreate BGP/Trident CRs), then BGPCloudConfiguration / BGPRouting (Azure
-Route Server peerings drain), PVCs/PVs using STORAGE_CLASS (default
-anf-virt), and TridentBackendConfig anf-backend. Requires oc and a
-kubeconfig. Does not run terraform destroy.
-EOF
-  exit 0
-fi
-
-command -v oc >/dev/null || die "oc is required"
+case "${1:-}" in
+  -h | --help)
+    echo 'Usage: trident-cleanup.sh [--backend-only]'
+    echo 'Drain GitOps, imports, BGP and PVCs/PVs. Stop consumers first.'
+    echo 'make cluster.<profile>.cleanup also verifies the Azure pool is empty before removing the backend.'
+    exit 0
+    ;;
+  '' | --backend-only) ;;
+  *) die 'Unknown argument' ;;
+esac
+command -v oc >/dev/null || die 'oc is required'
+command -v jq >/dev/null || die 'jq is required'
 export KUBECONFIG="${KUBECONFIG_PATH}"
-oc whoami >/dev/null 2>&1 || die "Cannot reach the API (oc whoami failed). Set KUBECONFIG."
-
-if oc get crd applications.argoproj.io >/dev/null 2>&1; then
-  if oc -n "${GITOPS_APP_NAMESPACE}" get application "${GITOPS_APP_NAME}" >/dev/null 2>&1; then
-    log "Deleting Argo CD Application ${GITOPS_APP_NAME} (namespace ${GITOPS_APP_NAMESPACE}) so GitOps does not recreate BGP/Trident CRs during cleanup"
-    oc -n "${GITOPS_APP_NAMESPACE}" delete application "${GITOPS_APP_NAME}" --ignore-not-found --wait=false || true
-  else
-    log "Argo CD Application ${GITOPS_APP_NAME} absent; skipping GitOps pause"
+oc whoami >/dev/null || die 'Cannot reach the API. Set KUBECONFIG_PATH.'
+# NotFound is the only absence we tolerate; authorization/transport failures stop teardown.
+if [[ "${1:-}" == --backend-only ]]; then
+  found="$(oc get crd tridentbackendconfigs.trident.netapp.io --ignore-not-found -o name)"
+  if [[ -n "$found" ]]; then
+    oc -n trident delete tridentbackendconfig anf-backend --ignore-not-found --wait=true --timeout=180s
   fi
-else
-  log "Argo CD Application CRD absent; skipping GitOps pause"
-fi
-
-if oc get crd bgpcloudconfigurations.networking.openshift.io >/dev/null 2>&1; then
-  log "Deleting BGPRouting and BGPCloudConfiguration so the operator can drop Azure peerings"
-  oc delete bgproutings.networking.openshift.io --all --ignore-not-found --wait=true --timeout=120s || true
-  oc delete bgpcloudconfiguration cluster --ignore-not-found --wait=true --timeout=300s || true
-else
-  log "BGPCloudConfiguration CRD absent; skipping BGP drain"
-fi
-
-if ! oc get crd tridentbackendconfigs.trident.netapp.io >/dev/null 2>&1; then
-  log "Trident CRDs absent; nothing to drain"
   exit 0
 fi
-
-log "Deleting PVCs that use StorageClass ${STORAGE_CLASS}"
-while IFS= read -r line; do
-  [[ -z "${line}" ]] && continue
-  ns="${line%% *}"
-  name="${line##* }"
-  log "Deleting pvc/${name} in ${ns}"
-  oc -n "${ns}" delete pvc "${name}" --wait=true --timeout=180s || true
-done < <(oc get pvc -A -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
-
-log "Deleting PVs still bound to ${STORAGE_CLASS}"
-while IFS= read -r pv; do
-  [[ -z "${pv}" ]] && continue
-  log "Deleting pv/${pv}"
-  oc delete pv "${pv}" --wait=true --timeout=180s || true
-done < <(oc get pv -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${STORAGE_CLASS}"'")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
-
-if oc -n trident get tridentbackendconfig anf-backend >/dev/null 2>&1; then
-  log "Deleting TridentBackendConfig anf-backend"
-  oc -n trident delete tridentbackendconfig anf-backend --wait=true --timeout=180s || true
+found="$(oc get crd applications.argoproj.io --ignore-not-found -o name)"
+if [[ -n "$found" ]]; then
+  log 'Removing the GitOps Application before draining managed resources'
+  oc -n "${GITOPS_APP_NAMESPACE}" delete application "${GITOPS_APP_NAME}" --ignore-not-found --wait=true --timeout=120s
 fi
-
-log "Cleanup finished. Remaining ANF volumes in Azure, if any, must be deleted before terraform destroy of the pool."
+found="$(oc get crd hyperconvergeds.hco.kubevirt.io --ignore-not-found -o name)"
+if [[ -n "$found" ]]; then
+  hco="$(oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv --ignore-not-found -o name)"
+  if [[ -n "$hco" ]]; then
+    log 'Disabling CNV common boot-image imports'
+    oc patch hyperconverged kubevirt-hyperconverged -n openshift-cnv --type merge -p '{"spec":{"enableCommonBootImageImport":false}}'
+  fi
+fi
+found="$(oc get crd dataimportcrons.cdi.kubevirt.io --ignore-not-found -o name)"
+if [[ -n "$found" ]]; then
+  # Custom imports also block teardown; do not silently leave a PVC producer running.
+  oc wait --for=delete dataimportcron --all -A --timeout=180s
+fi
+found="$(oc get crd bgpcloudconfigurations.networking.openshift.io --ignore-not-found -o name)"
+if [[ -n "$found" ]]; then
+  oc delete bgproutings.networking.openshift.io --all --ignore-not-found --wait=true --timeout=120s
+  oc delete bgpcloudconfiguration cluster --ignore-not-found --wait=true --timeout=600s
+else
+  log 'BGPCloudConfiguration CRD absent; skipping BGP drain'
+fi
+found="$(oc get crd tridentbackendconfigs.trident.netapp.io --ignore-not-found -o name)"
+if [[ -z "$found" ]]; then
+  log 'Trident CRDs absent; nothing to drain'
+  exit 0
+fi
+claims_json="$(oc get pvc -A -o json)"
+claims="$(jq -ce --arg sc "$STORAGE_CLASS" '[.items[] | select(.spec.storageClassName == $sc) | {namespace: .metadata.namespace, name: .metadata.name}]' <<<"$claims_json")"
+pods="$(oc get pods -A -o json)"
+consumers="$(jq -r --argjson claims "$claims" '
+  .items[] as $pod | select(any($pod.spec.volumes[]?;
+    .persistentVolumeClaim.claimName as $name | any($claims[];
+      .namespace == $pod.metadata.namespace and .name == $name))) |
+  "\($pod.metadata.namespace)/\($pod.metadata.name)"' <<<"$pods")"
+[[ -z "$consumers" ]] || die "Stop storage consumers before cleanup: ${consumers}"
+claim_rows="$(jq -r '.[] | [.namespace, .name] | @tsv' <<<"$claims")"
+while IFS=$'\t' read -r ns name; do
+  [[ -z "$ns" ]] && continue
+  log "Deleting pvc/${name} in ${ns}"
+  oc -n "$ns" delete pvc "$name" --ignore-not-found --wait=true --timeout=180s
+done <<<"$claim_rows"
+pvs="$(oc get pv -o json)"
+pv_names="$(jq -r --arg sc "$STORAGE_CLASS" '.items[] | select(.spec.storageClassName == $sc) | .metadata.name' <<<"$pvs")"
+while IFS= read -r pv; do
+  [[ -z "$pv" ]] && continue
+  oc delete pv "$pv" --ignore-not-found --wait=true --timeout=180s
+done <<<"$pv_names"
+log 'Kubernetes drain finished. Keep the backend and identities until Azure verifies the pool is empty.'
