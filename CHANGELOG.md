@@ -4,6 +4,13 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Settled-stack VM smoke tests
+
+- Add per-profile `stack-ready` and `smoke` targets with a continuous 120-second health window across cluster operators, GitOps, CNV, CSI, BGP/FRR, worker agents and configured image imports.
+- Recheck stability after disk provisioning and before each PVC-backed or Fedora 42 container-disk boot; follow HyperConverged workload placement and fail without automatic boot retries.
+- Retain sanitized readiness/startup reports and scope cleanup to a unique owned namespace and its PVs; cleanup failures fail the command.
+- Exercise readiness resets, missing controllers, deadlines, stage ordering, diagnostic token exclusion and cleanup ownership in the script-test gate.
+
 ### Retained import producers
 
 - Remove retained DataVolumes owning `anf-virt` claims before PVC drain, after rejecting Pod consumers and retained VM controllers.

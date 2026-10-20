@@ -164,3 +164,15 @@ A separate private VNet VM at 10.0.5.4 successfully reached HTTP endpoints on bo
 speaker and non-speaker CUDN Pods; both preserved the original source IP. Its NIC had
 an active 192.168.100.0/24 route through the two speakers.
 No guest networking, migration or worker replacement result is implied.
+
+### Repeatable settled-stack smoke
+
+Use `make cluster.<profile>.stack-ready` before ad hoc VM tests and
+`make cluster.<profile>.smoke` for the committed disposable boot tests. They use
+`KUBECONFIG_PATH` from the installer and require a continuous 120-second healthy
+window; `smoke` repeats the barrier after disk provisioning and before each VM.
+Do not replace this with an arbitrary sleep or silently retry failed VM startup.
+Success requires Running/Ready and AgentConnected for both configured boot sources,
+then cleanup of the run's namespace/PVs. Reports are in the profile's ignored logs.
+Use the [operator guide](../../docs/guides/consume.md#settled-stack-smoke-test) for
+settings and prerequisites. This does not validate migration or guest CUDN routing.

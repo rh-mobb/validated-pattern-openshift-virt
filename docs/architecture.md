@@ -68,3 +68,13 @@ operator defaults for its visible control-plane nodes. Cluster profiles add pool
 selectors and tolerations independently. The legacy `azure` path remains an HCP
 alias. See [Classic MIWI attachment notes](guides/consume.md#classic-miwi-attachment-notes)
 for bootstrap selection, branch testing and migration from inline patches.
+
+
+## Smoke-test readiness boundary
+
+The virt sibling owns `stack-ready` and `smoke` because it knows the CNV, Trident,
+image-import and BGP components. VM creation is gated on a continuous healthy
+window, including a second check after CSI provisioning. The smoke runner uses
+HyperConverged workload placement and a unique temporary namespace; failure
+reports omit CDI clone-token annotations and cleanup is scoped to that namespace.
+See [the smoke workflow](guides/consume.md#settled-stack-smoke-test).

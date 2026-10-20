@@ -13,7 +13,7 @@ unexport CLUSTER_NAME
 ARO_HCP_ROOT ?=
 ARO_HCP_PROFILE ?= $(CLUSTER_PROFILE)
 
-.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform anf-preview anf-cleanup
+.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform anf-preview anf-cleanup stack-ready smoke
 
 check-tfvars:
 	@test -f "$(TFVARS)" || (echo "Missing $(TFVARS)" >&2; exit 1)
@@ -48,3 +48,14 @@ destroy: cleanup
 bootstrap:
 	@export TFVARS="$(TFVARS)"; \
 	bash $(SCRIPTS)/gitops-bootstrap.sh
+
+# Both targets use the installer's KUBECONFIG_PATH; they do not run Terraform.
+SMOKE_STABLE_SECONDS ?= 120
+SMOKE_TIMEOUT_SECONDS ?= 1800
+SMOKE_BOOT_SOURCE ?= both
+
+stack-ready:
+	python3 $(SCRIPTS)/virt-smoke.py --ready-only --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"
+
+smoke:
+	python3 $(SCRIPTS)/virt-smoke.py --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --boot-source $(SMOKE_BOOT_SOURCE) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"

@@ -23,6 +23,48 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.ap
 make cluster.aro-virt.bootstrap
 ```
 
+## Settled-stack smoke test
+
+After sibling bootstrap, use the installer kubeconfig and this attachment's profile:
+
+```bash
+make cluster.aro-virt.stack-ready   # read-only readiness/stability check
+make cluster.aro-virt.smoke         # disposable VM tests, then cleanup
+```
+
+For the Classic example, substitute `aro-classic-virt` and set
+`KUBECONFIG_PATH` to the installer's `clusters/aro-classic-virt/.kube/config`.
+These targets do not run Terraform. `smoke` creates temporary ANF volumes through
+CDI/Trident inside the existing pool; run it only against an authorized test cluster.
+
+The gate requires **120 seconds of continuous health**, rather than a fixed sleep:
+cluster operators Available/not Progressing/not Degraded, Nodes Ready and workers
+uncordoned, Argo `virt-stack` Synced/Healthy with its operation Succeeded, ESO Ready,
+CNV settled, Trident Installed with its ANF backend Bound, BGP/FRR and worker
+forwarding agents Ready, and configured base-image imports complete/up to date.
+Active Pods in the stack namespaces must be Ready. Pod replacement/restarts, image
+PVC changes or an Argo revision change restart the window. Historical completed
+Jobs and unconfigured Windows/RHEL 7 DataSource placeholders do not block it.
+
+The same gate runs **again after test-disk provisioning and before every VM**.
+By default the runner boots a clone of the imported Fedora DataSource and then a
+Fedora 42 container-disk VMI, each with a separate shared data disk. Both must reach
+Running/Ready with the guest agent connected. Placement and tolerations follow
+HyperConverged's workload configuration. The two image releases may differ; this
+is a readiness/boot smoke test, not a controlled image comparison or migration test.
+
+`SMOKE_STABLE_SECONDS` (default 120), `SMOKE_TIMEOUT_SECONDS` (overall test deadline,
+default 1800), and `SMOKE_BOOT_SOURCE=pvc|container|both` control the run. Keep the
+stability window enabled for deployment validation. Failure stops the test without
+automatic VM retries, so a startup failure cannot be hidden by a later success.
+A JSON report under `clusters/<profile>/logs/virt-smoke/` retains boot results or
+scoped status, events, container state and launch timing diagnostics; raw CDI token
+annotations are excluded. The runner removes only its own unique namespace, then
+waits for its PVs to disappear (up to 600 seconds each, outside the test deadline).
+Cleanup errors make the command fail. It never deletes the catalog images, existing
+VMs, or ANF volumes directly. A successful stability window reduces startup races;
+it does not prove the cause of the earlier SyncVMI timeouts or guarantee future latency.
+
 ## Storage cleanup and full teardown
 
 Use the attachment's Make targets so the managed pool ARM ID in per-profile state binds
