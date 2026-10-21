@@ -6,6 +6,11 @@ Instructions for AI agents working in this repository.
 
 Customer-side **OpenShift RWX storage** (Azure NetApp Files + Trident CSI), **OpenShift Virtualization**, and **CUDN BGP** (Azure Route Server + in-cluster [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector)). Terraform provisions a NetApp-delegated subnet, ANF account and capacity pool, `RouteServerSubnet` + Route Server, and Trident/BGP identities. GitOps installs Trident, kubevirt-hyperconverged, and builds the BGP operator from [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) commit `2b6ad93989a2adfe4b52d4067f70a782aabd9a11` (kustomize remote + BuildConfig `ref`; bump both together). Cleanup drains BGP CRs then Trident/ANF volumes.
 
+GitOps bootstrap accepts `GITOPS_PLATFORM=classic|hcp` (default HCP) and a repository-relative
+`GITOPS_PATH` for a committed profile. Keep shared fixes in the base, platform operator
+placement in the platform overlays, and pool selectors/tolerations in profiles.
+Run `make gitops-test` with kubectl or oc and `pip install -r requirements-test.txt`.
+
 This is **not** an OpenShift cluster installer. The cluster lives in the sibling **ARO HCP** pattern: [`rh-mobb/validated-pattern-aro-hcp`](https://github.com/rh-mobb/validated-pattern-aro-hcp). Do not create an HCP cluster here. Do not add AWS/GCP providers beyond empty module stubs until those slices exist.
 
 ## Sibling: ARO HCP installer
@@ -45,7 +50,7 @@ When sources disagree:
 - **`modules/azure` is the product.** `terraform/` is a thin root (providers, backend, platform ingest → `module "azure"`). Do not pile resources into the root.
 - **Network privacy:** RFC1918 or Azure Private Endpoints only. ANF NFS via the delegated subnet is compliant (not a Private Endpoint). If a path cannot comply, add a row to the exception table in [`docs/architecture.md`](docs/architecture.md#network-privacy) **in the same change**.
 - **Do not** create ANF volumes in Terraform. Trident provisions them. Cleanup script then `terraform destroy`.
-- **BGP NIC writes:** sibling MI is Route Server BGP connections only. `networkInterfaceClientID` is installer `cluster_api_azure_client_id`. Do not add a customer MI for managed-RG NIC write.
+- **BGP NIC writes:** sibling MI is Route Server BGP connections only. `networkInterfaceClientID` is installer `cluster_api_azure_client_id` (HCP) or `machine_api_client_id` (Classic). Do not add a customer MI for managed-RG NIC write.
 - **Do not** install a second Argo CD. Consume `openshift-gitops` from the installer bootstrap.
 - **Do not** steal the cluster default StorageClass (`managed-csi`) unless an explicit flag says so.
 - **Do not** use Azure Files for VM disks.
@@ -85,7 +90,7 @@ export KUBECONFIG_PATH="${ARO_HCP_ROOT}/.kube/config"
 # unset TF_VAR_* in this shell
 ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.apply
 make cluster.aro-virt.bootstrap
-make cluster.aro-virt.destroy              # cleanup + terraform destroy; leftover ANF volumes: az delete, retry
+make cluster.aro-virt.destroy              # guarded cleanup + Terraform destroy; preview leftover volumes first
 ```
 
 In-tree: caller adds `module "netapp" { source = "git::https://github.com/rh-mobb/validated-pattern-openshift-virt.git//modules/azure?ref=<tag>" }`. They still need GitOps + cleanup. Pin `ref` to a tag.
@@ -123,8 +128,14 @@ Apply, destroy, and `trident-cleanup` must outlive the chat turn. A dead foregro
 ### Destroy
 
 1. Confirm subscription, RG, NetApp account, cluster name.
-2. `make cluster.<name>.cleanup` (or destroy, which runs it first): delete `virt-stack` Application, BGP CR drain, then `anf-virt` PVCs/PVs (wait timeout 180s). Azure volume delete is slower — leftover volumes 409 the pool; `az netappfiles volume delete`, wait until the list is empty, retry **this** destroy.
-3. Then `terraform destroy`.
+2. Stop storage consumers and run `.anf-preview`. `make cluster.<name>.cleanup`
+   removes Argo, disables common boot-image imports, waits for DataImportCrons, drains
+   BGP and PVCs/PVs, then waits for an empty Azure pool before removing the backend.
+   Direct leftover deletion requires `ANF_DELETE_CONFIRM=<rg>/<account>/<pool>`.
+   `.anf-cleanup` is the Azure-only recovery target after a partial destroy; do not
+   overlap it with another ARM mutation.
+3. `make cluster.<name>.destroy` runs that cleanup before Terraform removes the pool,
+   subnet and identities. Errors stop the sequence.
 4. Then the installer `make cluster.<name>.destroy`.
 
 ### Do not

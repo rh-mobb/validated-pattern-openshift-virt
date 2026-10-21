@@ -4,6 +4,39 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Classic validation and HCP merge gates
+
+- Document operator API registration and a longer cold-start smoke deadline while retaining the continuous 120-second stability barriers.
+- Record clean Classic boot, live-migration, external CUDN and teardown validation, including the checks' limits and unapplied policy-tag drift.
+- Provide explicit Classic and HCP commands against `feat/classic-gitops-overlays`; require HCP operator placement, storage, boot, migration and dataplane validation before merging.
+
+### Settled-stack VM smoke tests
+
+- Add per-profile `stack-ready` and `smoke` targets with a continuous 120-second health window across cluster operators, GitOps, CNV, CSI, BGP/FRR, worker agents and configured image imports.
+- Recheck stability after disk provisioning and before each PVC-backed or Fedora 42 container-disk boot; follow HyperConverged workload placement and fail without automatic boot retries.
+- Retain sanitized readiness/startup reports and scope cleanup to a unique owned namespace and its PVs; cleanup failures fail the command.
+- Exercise readiness resets, missing controllers, deadlines, stage ordering, diagnostic token exclusion and cleanup ownership in the script-test gate.
+
+### Retained import producers
+
+- Remove retained DataVolumes owning `anf-virt` claims before PVC drain, after rejecting Pod consumers and retained VM controllers.
+- Enforce DataVolume UID preconditions at deletion so replacements cannot be removed from a stale inventory.
+
+### Guarded ANF teardown
+
+- Add `.anf-preview` and `.anf-cleanup` targets scoped to the managed ANF pool in per-profile Terraform state, including recovery when failed destroy removed outputs.
+- Require explicit resource-group/account/pool confirmation for direct leftover-volume deletion, and verify an empty Azure pool before removing the Trident backend or Terraform-managed identities.
+- Disable common boot-image imports, reject active Pod consumers, and stop teardown on Kubernetes or Azure drain errors.
+- Cover deletion scoping, confirmation, partial-destroy retries and Make ordering with mocked tests; document the workflow and recovery targets.
+
+### Classic and HCP GitOps overlays
+
+- Add shared GitOps base consumption through `azure-classic` and `azure-hcp` overlays; retain `azure` as an HCP compatibility alias.
+- Add a Classic virt example profile with pool placement and taint tolerations, selected through bootstrap `GITOPS_PLATFORM` / `GITOPS_PATH` and branch revision controls.
+- Accept Classic `machine_api_client_id` for NIC operations while retaining HCP `cluster_api_azure_client_id` support.
+- Restrict the NIC-forwarding agent to workers and remove the empty BGP image-change trigger that caused Argo drift.
+- Document Classic attachment requirements and validation, with real overlay-render checks in the test gate.
+
 ### Added
 
 - Azure Route Server (`RouteServerSubnet` + Standard PIP) and BGP UAMI in `modules/azure`, consumed from installer `platform.json` (`route_server_subnet_prefix`, `bgp_router` pools, `cluster_api_azure_client_id`)
