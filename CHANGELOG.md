@@ -4,6 +4,12 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### Classic validation and HCP merge gates
+
+- Document operator API registration and a longer cold-start smoke deadline while retaining the continuous 120-second stability barriers.
+- Record clean Classic boot, live-migration, external CUDN and teardown validation, including the checks' limits and unapplied policy-tag drift.
+- Provide explicit Classic and HCP commands against `feat/classic-gitops-overlays`; require HCP operator placement, storage, boot, migration and dataplane validation before merging.
+
 ### Settled-stack VM smoke tests
 
 - Add per-profile `stack-ready` and `smoke` targets with a continuous 120-second health window across cluster operators, GitOps, CNV, CSI, BGP/FRR, worker agents and configured image imports.

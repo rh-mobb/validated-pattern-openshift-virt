@@ -65,6 +65,29 @@ Cleanup errors make the command fail. It never deletes the catalog images, exist
 VMs, or ANF volumes directly. A successful stability window reduces startup races;
 it does not prove the cause of the earlier SyncVMI timeouts or guarantee future latency.
 
+On a fresh installation, wait for the operators to register their APIs before
+invoking these targets. Bootstrap returns after creating the Argo Application;
+it does not wait for CNV/CDI/BGP installation. A missing API currently stops the
+readiness inventory immediately, before any test namespace or VM is created.
+The gate subsequently waits for registered resources and image imports to settle.
+
+Allow a larger deadline for the first run, including catalog imports and test-disk
+provisioning:
+
+```bash
+SMOKE_TIMEOUT_SECONDS=3600 make cluster.aro-classic-virt.smoke
+```
+
+A clean Classic validation on 2026-10-20 exhausted the default 1800-second budget
+while cloning the test root disk, after waiting for all six catalog imports. No VM
+had been launched; cleanup completed. The subsequent 3600-second run passed both
+boot sources with the unchanged 120-second stability windows. Catalog ANF volumes
+had 4 MiB/s throughput limits; do not treat 99% import progress as completion.
+
+The 2026-10-21 cold Classic repeat waited for API registration and used the same
+3600-second budget. All six imports completed, both boots passed, and test cleanup
+succeeded with the unchanged stability barriers.
+
 ## Storage cleanup and full teardown
 
 Use the attachment's Make targets so the managed pool ARM ID in per-profile state binds
@@ -182,12 +205,27 @@ GITOPS_PLATFORM=classic \
 GITOPS_PATH=gitops/profiles/aro-classic-virt \
 GITOPS_REVISION=feat/classic-gitops-overlays \
 make cluster.aro-classic-virt.bootstrap
+
+# HCP regression against the same branch before merging:
+GITOPS_PLATFORM=hcp \
+GITOPS_PATH=gitops/overlays/azure-hcp \
+GITOPS_REVISION=feat/classic-gitops-overlays \
+make cluster.aro-virt.bootstrap
 ```
 
 Create the attachment's local tfvars/state and set the installer kubeconfig as above
 before bootstrap. `GITOPS_REPO` can point at a fork; Argo must be able to read the
 chosen repository and revision. Copy the example profile into your own committed
 profile when labels, taints or placement differ.
+
+Keep the branch selection explicit until HCP validation completes. The recorded
+Classic checks do not establish HCP behavior. Before merging, verify the HCP
+Application uses this branch and the HCP overlay, CNV operators run on workers,
+Trident and all catalog imports settle, both smoke boot sources pass, and a
+separate live-migration check succeeds. Also verify all worker NICs have forwarding,
+speaker FRR sessions establish, and the installer jump reaches both speaker and
+non-speaker CUDN endpoints. Retain the validation and cleanup evidence, then move
+consumers to the merged revision.
 
 The shared NIC-forwarding DaemonSet selects Linux workers and tolerates pool taints.
 The shared BGP BuildConfig uses only ConfigChange: OpenShift discards an empty

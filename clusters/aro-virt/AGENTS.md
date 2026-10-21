@@ -165,6 +165,25 @@ speaker and non-speaker CUDN Pods; both preserved the original source IP. Its NI
 an active 192.168.100.0/24 route through the two speakers.
 No guest networking, migration or worker replacement result is implied.
 
+
+### Clean Classic rebuild follow-up (2026-10-19)
+
+A fresh Classic cluster consumed branch `feat/classic-gitops-overlays` at `c694230`
+with `gitops/profiles/aro-classic-virt` and no inline Argo patches. Argo reached
+Synced/Healthy/Succeeded, CNV was Available and not Degraded, Trident's backend was
+Bound, four FRR sessions established, and all seven worker NICs had forwarding.
+Cross-node RWX access passed. A fresh private VM probe reached speaker and
+non-speaker CUDN Pods with source IP preserved; its VM, disk, NIC and subnet were
+verified absent afterward.
+
+The fresh VMI boot check failed twice with SyncVMI timeouts followed by
+`containerdisk rootdisk still not ready after one minute`; the root-disk sidecar
+had exited. Cause remains unresolved. Do not infer VM boot success on this fresh
+cluster from the earlier attachment's successful VMI test. Inspect launcher and
+handler logs before retrying; remove disposable failed instances through normal
+finalization, without force deletion or finalizer removal.
+
+
 ### Repeatable settled-stack smoke
 
 Use `make cluster.<profile>.stack-ready` before ad hoc VM tests and
@@ -176,3 +195,38 @@ Success requires Running/Ready and AgentConnected for both configured boot sourc
 then cleanup of the run's namespace/PVs. Reports are in the profile's ignored logs.
 Use the [operator guide](../../docs/guides/consume.md#settled-stack-smoke-test) for
 settings and prerequisites. This does not validate migration or guest CUDN routing.
+
+Fresh Classic validation on 2026-10-20 found two entry-point limits: invoking the
+gate before operator API registration fails immediately without creating test
+resources; waiting for cold catalog imports can exhaust the default 1800-second
+overall budget before a VM starts. Wait for CNV/CDI/BGP APIs and allow
+`SMOKE_TIMEOUT_SECONDS=3600` for a cold deployment. Preserve failed reports and
+verify cleanup before another run. Do not describe these pre-boot failures as VM
+boot failures or silently retry a failed VM. The longer-budget validation passed
+both boot sources and cleanup with the same 120-second barriers.
+
+The clean Classic rebuild used infrastructure ID `aro-classic-virt-98vk6` and
+GitOps profile `gitops/profiles/aro-classic-virt` at `8b76ccf`, without inline
+patches. Both Fedora boot sources passed. A separate PVC-backed Fedora VMI
+live-migrated from virt worker 1 to worker 2 in PreCopy mode with unchanged VMI
+UID/guest boot ID and heartbeat counter 2 → 14; this used default pod networking.
+An external private VM reached speaker and non-speaker CUDN Pods with source IP
+preserved. Disposable VM/storage namespaces and the private probe VM/disk/NIC/subnet
+were removed. Guest CUDN migration and worker replacement were not tested.
+
+Final drift check: installer no changes; sibling six tag-only updates removing
+`app-code` and `cost-center`, consistent with the previously observed policy tags.
+These were not applied. No additions, deletions or replacements were planned;
+sibling tag ownership remains a follow-up.
+
+A repeat clean Classic deployment on 2026-10-21 (`aro-classic-virt-wfdbr`, sibling
+`8b76ccf`) completed both applies without recovery. Waiting for API registration
+before the 3600-second smoke run allowed all six catalog imports, both boot
+sources and cleanup to pass. A separate Fedora VMI migrated from virt worker 2
+to worker 1 with unchanged VMI UID/guest boot ID and heartbeat 2 → 15. External
+speaker/non-speaker CUDN HTTP preserved source IP; the temporary probe VM, disk,
+NIC and subnet and all test namespaces/volumes were removed. No effective route
+table was captured in this repeat. Guest CUDN migration and worker replacement
+remain untested. The same six sibling policy-tag updates were left unapplied.
+The sibling and installer were then destroyed successfully in that order; both
+resource groups were absent and both Terraform states had zero managed resources.
