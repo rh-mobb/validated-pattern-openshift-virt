@@ -5,6 +5,12 @@ locals {
     for name, p in try(local.platform.node_pools, {}) : name
     if tostring(try(p.labels["bgp_router"], "")) == "true"
   ]
+
+  network_interface_client_id = (
+    trimspace(try(local.platform.machine_api_client_id, "")) != "" ?
+    trimspace(local.platform.machine_api_client_id) :
+    trimspace(try(local.platform.cluster_api_azure_client_id, ""))
+  )
 }
 
 module "azure" {
@@ -18,7 +24,7 @@ module "azure" {
   route_server_subnet_prefix  = try(local.platform.network.reserved.route_server_subnet_prefix, "")
   bgp_router_pool_names       = local.bgp_router_pool_names
   oidc_issuer_url             = local.platform.oidc_issuer_url
-  network_interface_client_id = try(local.platform.cluster_api_azure_client_id, "")
+  network_interface_client_id = local.network_interface_client_id
   pool_size_tib               = var.pool_size_tib
   custom_throughput_mibps     = var.custom_throughput_mibps
   tags                        = var.tags

@@ -75,7 +75,7 @@ variable "bgp_federated_subject" {
 }
 
 variable "network_interface_client_id" {
-  description = "Installer cluster-api-azure client ID (BGPCloudConfiguration spec.azure.networkInterfaceClientID). Empty fails apply."
+  description = "Installer NIC identity client ID (HCP cluster-api-azure or Classic machine-api) for BGPCloudConfiguration spec.azure.networkInterfaceClientID. Empty fails apply."
   type        = string
   default     = ""
 }

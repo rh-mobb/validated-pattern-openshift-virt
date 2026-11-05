@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+import json,os,sys
+args=sys.argv[1:]
+with open(os.environ['CLEANUP_CALLS'],'a') as f:f.write(' '.join(args)+'\n')
+s=os.environ['CLEANUP_SCENARIO']
+if args[:2]==['get','crd']:
+ print(args[2]);sys.exit(0)
+if args[:2]==['get','hyperconverged']:
+ print('hyperconverged/kubevirt-hyperconverged');sys.exit(0)
+if args[:2]==['get','pvc']:
+ if s=='inventory_error':sys.exit(1)
+ metadata={'namespace':'test','name':'data'}
+ if s.startswith('dv_'):metadata['ownerReferences']=[{'kind':'DataVolume','name':'data','uid':'dv-uid'}]
+ print(json.dumps({'items':[{'metadata':metadata,'spec':{'storageClassName':'anf-virt'}}]}));sys.exit(0)
+if args[:2]==['get','pods']:
+ pods=[{'metadata':{'namespace':'test','name':'writer'},'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':'data'}}]}}] if s in ('consumer','dv_consumer') else []
+ print(json.dumps({'items':pods}));sys.exit(0)
+if args[:2]==['get','pv']:
+ print('{"items":[]}');sys.exit(0)
+if args[:2]==['delete','bgproutings.networking.openshift.io'] and s=='bgp_error':sys.exit(1)
+
+if args[:2]==['get','datavolumes.cdi.kubevirt.io']:
+ metadata={'namespace':'test','name':'data','uid':'changed' if s=='dv_changed' else 'dv-uid'}
+ if s=='dv_controller':metadata['ownerReferences']=[{'kind':'VirtualMachine','name':'vm','uid':'vm-uid'}]
+ print(json.dumps({'items':[{'metadata':metadata}]}));sys.exit(0)
+
+if args[:2]==['delete','--raw']:
+ body=json.load(sys.stdin)
+ assert body['preconditions']['uid']=='dv-uid'
+ if s=='dv_replaced_at_delete':
+  print('Error from server (Conflict): UID precondition failed',file=sys.stderr)
+  sys.exit(1)

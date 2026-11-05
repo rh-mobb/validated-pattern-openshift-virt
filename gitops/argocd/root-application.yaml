@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/rh-mobb/validated-pattern-openshift-virt.git
     targetRevision: main
-    path: gitops/overlays/azure
+    path: gitops/overlays/azure-hcp
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

@@ -1,6 +1,6 @@
 # Consume modes
 
-Canonical **two-checkout e2e** (installer jump-key → apply → kubeconfig → external-auth → bootstrap → platform → this apply → this bootstrap, plus verify and destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/). Agent done-when: [`clusters/aro-virt/AGENTS.md`](../../clusters/aro-virt/AGENTS.md).
+Canonical **two-checkout e2e** (installer jump-key → apply → kubeconfig → external-auth → bootstrap → platform → this apply → this bootstrap, plus verify and destroy): [installer Virt stack](https://rh-mobb.github.io/validated-pattern-aro-hcp/guides/virt-stack/). Agent done-when: [`clusters/aro-virt/AGENTS.md`](https://github.com/rh-mobb/validated-pattern-openshift-virt/blob/main/clusters/aro-virt/AGENTS.md).
 
 ## Second IaC run (canonical)
 
@@ -23,7 +23,135 @@ ARO_HCP_ROOT="${ARO_HCP_ROOT}" ARO_HCP_PROFILE=aro-virt make cluster.aro-virt.ap
 make cluster.aro-virt.bootstrap
 ```
 
-Destroy reverse: `make cluster.aro-virt.destroy` here (`trident-cleanup.sh` deletes the `virt-stack` Application, drains BGP CRs, then ANF PVCs/PVs, then terraform; leftover ANF volumes block the pool — delete them and retry). Then installer destroy.
+## Settled-stack smoke test
+
+After sibling bootstrap, use the installer kubeconfig and this attachment's profile:
+
+```bash
+make cluster.aro-virt.stack-ready   # read-only readiness/stability check
+make cluster.aro-virt.smoke         # disposable VM tests, then cleanup
+```
+
+For the Classic example, substitute `aro-classic-virt` and set
+`KUBECONFIG_PATH` to the installer's `clusters/aro-classic-virt/.kube/config`.
+These targets do not run Terraform. `smoke` creates temporary ANF volumes through
+CDI/Trident inside the existing pool; run it only against an authorized test cluster.
+
+The gate requires **120 seconds of continuous health**, rather than a fixed sleep:
+cluster operators Available/not Progressing/not Degraded, Nodes Ready and workers
+uncordoned, Argo `virt-stack` Synced/Healthy with its operation Succeeded, ESO Ready,
+CNV settled, Trident Installed with its ANF backend Bound, BGP/FRR and worker
+forwarding agents Ready, and configured base-image imports complete/up to date.
+Active Pods in the stack namespaces must be Ready. Pod replacement/restarts, image
+PVC changes or an Argo revision change restart the window. Historical completed
+Jobs and unconfigured Windows/RHEL 7 DataSource placeholders do not block it.
+
+The same gate runs **again after test-disk provisioning and before every VM**.
+By default the runner boots a clone of the imported Fedora DataSource and then a
+Fedora 42 container-disk VMI, each with a separate shared data disk. Both must reach
+Running/Ready with the guest agent connected. Placement and tolerations follow
+HyperConverged's workload configuration. The two image releases may differ; this
+is a readiness/boot smoke test, not a controlled image comparison or migration test.
+
+`SMOKE_STABLE_SECONDS` (default 120), `SMOKE_TIMEOUT_SECONDS` (overall test deadline,
+default 1800), and `SMOKE_BOOT_SOURCE=pvc|container|both` control the run. Keep the
+stability window enabled for deployment validation. Failure stops the test without
+automatic VM retries, so a startup failure cannot be hidden by a later success.
+A JSON report under `clusters/<profile>/logs/virt-smoke/` retains boot results or
+scoped status, events, container state and launch timing diagnostics; raw CDI token
+annotations are excluded. The runner removes only its own unique namespace, then
+waits for its PVs to disappear (up to 600 seconds each, outside the test deadline).
+Cleanup errors make the command fail. It never deletes the catalog images, existing
+VMs, or ANF volumes directly. A successful stability window reduces startup races;
+it does not prove the cause of the earlier SyncVMI timeouts or guarantee future latency.
+
+On a fresh installation, wait for the operators to register their APIs before
+invoking these targets. Bootstrap returns after creating the Argo Application;
+it does not wait for CNV/CDI/BGP installation. A missing API currently stops the
+readiness inventory immediately, before any test namespace or VM is created.
+The gate subsequently waits for registered resources and image imports to settle.
+
+Allow a larger deadline for the first run, including catalog imports and test-disk
+provisioning:
+
+```bash
+SMOKE_TIMEOUT_SECONDS=3600 make cluster.aro-classic-virt.smoke
+```
+
+A clean Classic validation on 2026-10-20 exhausted the default 1800-second budget
+while cloning the test root disk, after waiting for all six catalog imports. No VM
+had been launched; cleanup completed. The subsequent 3600-second run passed both
+boot sources with the unchanged 120-second stability windows. Catalog ANF volumes
+had 4 MiB/s throughput limits; do not treat 99% import progress as completion.
+
+The 2026-10-21 cold Classic repeat waited for API registration and used the same
+3600-second budget. All six imports completed, both boots passed, and test cleanup
+succeeded with the unchanged stability barriers.
+
+## Storage cleanup and full teardown
+
+Use the attachment's Make targets so the managed pool ARM ID in per-profile state binds
+Azure operations to the correct subscription, resource group, ANF account and pool:
+
+```bash
+make cluster.aro-virt.anf-preview
+make cluster.aro-virt.destroy
+```
+
+Preview lists volumes without changing Kubernetes or Azure. Destroy removes the
+GitOps Application, disables CNV common boot-image imports, waits for DataImportCrons
+to disappear, drains BGP, and deletes `anf-virt` PVCs/PVs. Stop VMs, Pods and their
+owning controllers first; cleanup reports remaining Pod consumers and refuses to
+delete their claims. Custom DataImportCrons must also be stopped before drain.
+After the consumer check, cleanup also removes DataVolumes identified by the exact
+owner UIDs of this storage class's PVCs, before deleting the claims. This prevents
+retained catalog DataVolumes from recreating PVCs after DataImportCrons disappear.
+Deletion uses an API-enforced UID precondition, so a replacement DataVolume is
+protected even if it appears after inventory. A changed UID or a retained
+VM/VM-pool controller blocks deletion.
+API, authorization, import-drain or PVC-deletion errors stop teardown.
+
+The Azure gate waits up to 600 seconds for CSI to remove volumes while the Trident
+backend and identities still exist. If volumes remain, it stops before Terraform
+destroy. A missing PVC is not proof that the remaining volume's data is disposable.
+For an explicitly confirmed full teardown, review the preview and supply the exact
+`resource-group/account/pool` confirmation printed by it:
+
+```bash
+ANF_DELETE_CONFIRM=aro-virt-rg/aro-virt-anf/aro-virt-anf-pool \
+  make cluster.aro-virt.destroy
+```
+
+Confirmed cleanup deletes only volume IDs inside that exact Terraform-managed pool,
+then waits for an empty Azure inventory. It does not force-break replication or
+remove Kubernetes finalizers. Only after the pool is empty does it remove the
+Trident backend and run Terraform destroy of the pool, account, subnet and identities.
+Read-only scope and account validation runs before Kubernetes drain. The active Azure
+subscription must match the managed pool ID; inventory failures
+are errors, never an empty-pool result. Azure CLI, Python 3, jq, Terraform and oc are
+required for the complete workflow.
+
+For recovery after a previous partial destroy has already removed Trident or its
+identity, use the Azure-only gate after reviewing its inventory:
+
+```bash
+make cluster.aro-virt.anf-preview
+ANF_DELETE_CONFIRM=aro-virt-rg/aro-virt-anf/aro-virt-anf-pool \
+  make cluster.aro-virt.anf-cleanup
+# Then retry the sibling destroy, after any remaining Kubernetes drain issues are resolved.
+```
+
+`anf-cleanup` defaults to waiting without direct deletion unless the confirmation
+matches. `ANF_VOLUME_WAIT_SECONDS` controls each wait window (default 600, maximum
+7200; zero performs immediate checks). Azure errors or volumes still present after
+the final wait cause a nonzero exit. Scope comes from the exact `module.azure.azurerm_netapp_pool.this` ARM ID in state,
+so recovery also works when a failed destroy has already removed all outputs. Invalid
+or ambiguous state stops cleanup. If state proves there is no managed ANF pool left,
+the workflow skips storage drain and lets Terraform finish other resources; it does
+not claim to have inventoried Azure or delete any untracked pools. There is no fallback
+to guessed resource names or subscription-wide deletion.
+
+Destroy reverse: `make cluster.aro-virt.destroy` here (Kubernetes drain, Azure volume gate, backend removal, then Terraform). Then installer destroy.
 
 GitOps: `make cluster.aro-virt.bootstrap` pre-applies `virt-stack-gitops-controller` (`cluster-admin` on `openshift-gitops-argocd-application-controller`) before the `virt-stack` Application — the binding also stays at sync-wave `-1` inside that App. Metadata Jobs (`trident-from-metadata`, `bgp-from-metadata`) are **sync-wave `4` resources**, not `hook: Sync` hooks, so wave `6` (`azure-nic-ip-forwarding`) waits for the Job ConfigMap. The Trident Job uses a ClusterRole for cluster-scoped `TridentOrchestrator` and CRD `get`. BGP operator is an in-cluster build of [bgp-cloud-connector](https://github.com/openshift/bgp-cloud-connector) pinned to commit `2b6ad93989a2adfe4b52d4067f70a782aabd9a11` (`gitops/operators/bgp-cloud-connector` kustomize `config/default?ref=` and BuildConfig `spec.source.git.ref` must stay in lockstep); `bgp-from-metadata` stamps workload identity (sibling BGP MI) and `BGPCloudConfiguration` including `networkInterfaceClientID` (installer `cluster-api-azure`). Sample `BGPRouting` `virt` (`192.168.100.0/24`, namespace `virt`) is in `gitops/samples/cudn`; the operator creates the CUDN. Same Argo CD instance as the installer `cluster-config` Application.
 
@@ -46,3 +174,70 @@ module "netapp" {
 ```
 
 Pin `ref` to a tag. Still install sibling `gitops/` (Argo Application: Trident + OpenShift Virtualization) and run `trident-cleanup.sh` before destroying the module. The ARO HCP installer root does **not** call this module.
+
+## Classic MIWI attachment notes
+
+Use an installer contract with `machine_api_client_id` for managed-RG NIC operations.
+Keep the BGP identity scoped to Route Server operations and reuse installer Argo CD.
+
+The GitOps layout separates shared resources from platform and cluster placement:
+
+- `gitops/base`: shared Trident, CNV, BGP and sample CUDN resources.
+- `gitops/overlays/azure-hcp`: forces CNV operators onto workers, preserving HCP behavior.
+- `gitops/overlays/azure-classic`: uses the operators' default control-plane placement.
+- `gitops/overlays/azure`: compatibility alias for `azure-hcp`.
+- `gitops/profiles/aro-classic-virt`: example Classic overlay selecting `pool=np-virt`
+  for virt workloads and tolerating `workload=virtualization:NoSchedule`. HCO infra
+  remains on untainted workers. Adjust this profile for your actual labels and taints.
+
+`GITOPS_PLATFORM` accepts `classic` or `hcp` (default `hcp` for existing callers).
+`GITOPS_PATH` overrides the selected directory for a committed cluster profile; the
+profile's Kustomization chooses its platform base. Bootstrap validates the local path
+and uses it both in dry-run and in the Argo Application. It does not infer the platform
+from the presence of worker nodes. Platform identity selection stays in Terraform.
+
+```bash
+# Generic Classic placement, without this example's pool selectors:
+GITOPS_PLATFORM=classic make cluster.aro-classic-virt.bootstrap
+
+# Example tainted virt pool; test an already-pushed branch:
+GITOPS_PLATFORM=classic \
+GITOPS_PATH=gitops/profiles/aro-classic-virt \
+GITOPS_REVISION=feat/classic-gitops-overlays \
+make cluster.aro-classic-virt.bootstrap
+
+# HCP regression against the same branch before merging:
+GITOPS_PLATFORM=hcp \
+GITOPS_PATH=gitops/overlays/azure-hcp \
+GITOPS_REVISION=feat/classic-gitops-overlays \
+make cluster.aro-virt.bootstrap
+```
+
+Create the attachment's local tfvars/state and set the installer kubeconfig as above
+before bootstrap. `GITOPS_REPO` can point at a fork; Argo must be able to read the
+chosen repository and revision. Copy the example profile into your own committed
+profile when labels, taints or placement differ.
+
+Keep the branch selection explicit until HCP validation completes. The recorded
+Classic checks do not establish HCP behavior. Before merging, verify the HCP
+Application uses this branch and the HCP overlay, CNV operators run on workers,
+Trident and all catalog imports settle, both smoke boot sources pass, and a
+separate live-migration check succeeds. Also verify all worker NICs have forwarding,
+speaker FRR sessions establish, and the installer jump reaches both speaker and
+non-speaker CUDN endpoints. Retain the validation and cleanup evidence, then move
+consumers to the merged revision.
+
+The shared NIC-forwarding DaemonSet selects Linux workers and tolerates pool taints.
+The shared BGP BuildConfig uses only ConfigChange: OpenShift discards an empty
+ImageChange trigger, which otherwise causes persistent Argo drift.
+
+When migrating an Application that already has inline `spec.source.kustomize.patches`,
+first represent every override in the selected Git profile and compare the render.
+Then remove the old inline patches. Bootstrap does not discard existing inline
+customizations automatically. The 2026-10-19 Classic test originally used those
+patches before moving to the maintained profile.
+
+Established BGP and an active effective route do not prove external CUDN connectivity.
+A Classic worker host can select OVN policy-routing table 1053 instead of the Azure
+path. Use a separate private VNet host for the Route Server dataplane check; do not
+interpret that worker-host probe's result as an external routing result.

@@ -92,3 +92,37 @@ setup() {
   grep -q 'applications.argoproj.io' "${script}"
   ! grep -q 'mapfile' "${script}"
 }
+
+@test "bootstrap selects the Classic overlay" {
+  export GITOPS_PLATFORM=classic
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/overlays/azure-classic"* ]]
+}
+
+@test "bootstrap defaults to HCP for existing callers" {
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/overlays/azure-hcp"* ]]
+}
+
+@test "bootstrap accepts a committed profile path" {
+  export GITOPS_PATH=gitops/profiles/aro-classic-virt
+  export GITOPS_REVISION=feat/classic-gitops-overlays
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/profiles/aro-classic-virt"* ]]
+  [[ "$output" == *"targetRevision: feat/classic-gitops-overlays"* ]]
+}
+
+@test "bootstrap rejects an unknown platform before touching the cluster" {
+  export GITOPS_PLATFORM=typo
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "bootstrap rejects paths outside the checkout" {
+  export GITOPS_PATH=../other-repo
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -ne 0 ]
+}

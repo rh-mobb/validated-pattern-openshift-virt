@@ -8,6 +8,8 @@ TF_DIR="${ROOT_DIR}/terraform"
 GITOPS_DIR="${ROOT_DIR}/gitops"
 GITOPS_REPO="${GITOPS_REPO:-https://github.com/rh-mobb/validated-pattern-openshift-virt.git}"
 GITOPS_REVISION="${GITOPS_REVISION:-main}"
+GITOPS_PLATFORM="${GITOPS_PLATFORM:-hcp}"
+GITOPS_PATH="${GITOPS_PATH:-gitops/overlays/azure-${GITOPS_PLATFORM}}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${ROOT_DIR}/.kube/config}"
 GITOPS_DRY_RUN="${GITOPS_DRY_RUN:-}"
 
@@ -17,13 +19,22 @@ die() {
   exit 1
 }
 
+case "${GITOPS_PLATFORM}" in
+  classic | hcp) ;;
+  *) die "GITOPS_PLATFORM must be classic or hcp" ;;
+esac
+# The path is also used locally for dry-run, so reject traversal and absolute paths.
+[[ "${GITOPS_PATH}" =~ ^gitops/[a-zA-Z0-9_/-]+$ ]] || die "GITOPS_PATH must be a repository-relative gitops directory"
+[[ -f "${ROOT_DIR}/${GITOPS_PATH}/kustomization.yaml" ]] || die "Missing ${GITOPS_PATH}/kustomization.yaml"
+
 tf_raw() {
   terraform -chdir="${TF_DIR}" output -raw "$1" 2>/dev/null || true
 }
 
 render_app() {
-  awk -v repo="${GITOPS_REPO}" -v rev="${GITOPS_REVISION}" '
+  awk -v repo="${GITOPS_REPO}" -v rev="${GITOPS_REVISION}" -v path="${GITOPS_PATH}" '
     $1 == "repoURL:" { printf "    repoURL: %s\n", repo; next }
+    $1 == "path:" { printf "    path: %s\n", path; next }
     $1 == "targetRevision:" { printf "    targetRevision: %s\n", rev; next }
     { print }
   ' "${GITOPS_DIR}/argocd/root-application.yaml"
@@ -65,9 +76,9 @@ if [[ -n "${GITOPS_DRY_RUN}" ]]; then
   render_app
   metadata_cm
   if command -v oc >/dev/null 2>&1; then
-    oc kustomize "${GITOPS_DIR}/overlays/azure"
+    oc kustomize "${ROOT_DIR}/${GITOPS_PATH}"
   elif command -v kubectl >/dev/null 2>&1; then
-    kubectl kustomize "${GITOPS_DIR}/overlays/azure"
+    kubectl kustomize "${ROOT_DIR}/${GITOPS_PATH}"
   fi
   exit 0
 fi
@@ -84,4 +95,5 @@ oc apply -f "${GITOPS_DIR}/base/gitops-controller-rbac.yaml"
 
 metadata_cm | oc apply -f -
 render_app | oc apply -f -
+log "Source: ${GITOPS_REPO}@${GITOPS_REVISION}, ${GITOPS_PATH}"
 log "Applied virt-stack-gitops-controller, virt-stack Application, anf-platform-metadata, and bgp-platform-metadata"

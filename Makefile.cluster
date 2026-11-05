@@ -13,7 +13,7 @@ unexport CLUSTER_NAME
 ARO_HCP_ROOT ?=
 ARO_HCP_PROFILE ?= $(CLUSTER_PROFILE)
 
-.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform
+.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform anf-preview anf-cleanup stack-ready smoke
 
 check-tfvars:
 	@test -f "$(TFVARS)" || (echo "Missing $(TFVARS)" >&2; exit 1)
@@ -33,12 +33,29 @@ plan: init refresh-platform
 apply: init refresh-platform
 	terraform -chdir=$(TF_DIR) apply -auto-approve -var-file="$(TFVARS)"
 
-cleanup:
-	bash $(SCRIPTS)/trident-cleanup.sh
+anf-preview: init
+	python3 $(SCRIPTS)/anf-volume-cleanup.py
 
-destroy: init cleanup
+anf-cleanup: init
+	python3 $(SCRIPTS)/anf-volume-cleanup.py --apply
+
+cleanup: init
+	python3 $(SCRIPTS)/anf-volume-cleanup.py --drain
+
+destroy: cleanup
 	terraform -chdir=$(TF_DIR) destroy -auto-approve -var-file="$(TFVARS)"
 
 bootstrap:
 	@export TFVARS="$(TFVARS)"; \
 	bash $(SCRIPTS)/gitops-bootstrap.sh
+
+# Both targets use the installer's KUBECONFIG_PATH; they do not run Terraform.
+SMOKE_STABLE_SECONDS ?= 120
+SMOKE_TIMEOUT_SECONDS ?= 1800
+SMOKE_BOOT_SOURCE ?= both
+
+stack-ready:
+	python3 $(SCRIPTS)/virt-smoke.py --ready-only --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"
+
+smoke:
+	python3 $(SCRIPTS)/virt-smoke.py --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --boot-source $(SMOKE_BOOT_SOURCE) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"

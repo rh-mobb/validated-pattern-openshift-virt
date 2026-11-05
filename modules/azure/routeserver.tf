@@ -14,7 +14,7 @@ resource "terraform_data" "bgp_prereqs" {
 
     precondition {
       condition     = trimspace(var.network_interface_client_id) != ""
-      error_message = "platform.json cluster_api_azure_client_id is required for BGPCloudConfiguration networkInterfaceClientID (installer CAPI identity). Re-run make cluster.<name>.platform after installer apply."
+      error_message = "platform.json must include machine_api_client_id (Classic) or cluster_api_azure_client_id (HCP) for BGPCloudConfiguration networkInterfaceClientID. Re-run make cluster.<name>.platform after installer apply."
     }
   }
 }
