@@ -4,5 +4,5 @@ resources:
   - gitops-controller-rbac.yaml
   - ../operators/trident
   - ../operators/cnv
-  - ../operators/bgp-cloud-connector
+  - ../operators/bgp-cloud-connector/azure
   - ../samples/cudn

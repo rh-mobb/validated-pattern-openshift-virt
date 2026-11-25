@@ -5,6 +5,7 @@ setup() {
   export GITOPS_DRY_RUN=1
   export TF_DATA_DIR="${BATS_TEST_DIRNAME}/tmp"
   mkdir -p "${BATS_TEST_DIRNAME}/tmp"
+  unset GITOPS_PLATFORM GITOPS_PATH GITOPS_OVERLAY GITOPS_REVISION OSD_GCP_ROOT CLEANUP_PLATFORM
 }
 
 @test "gitops dry-run includes trident-operator subscription" {
@@ -47,8 +48,8 @@ setup() {
 }
 
 @test "bgp-cloud-connector kustomize and BuildConfig pin the same git SHA" {
-  kus="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/kustomization.yaml"
-  bc="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/buildconfig.yaml"
+  kus="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/core/kustomization.yaml"
+  bc="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/core/buildconfig.yaml"
   kref=$(sed -n 's|.*bgp-cloud-connector/config/default?ref=\([0-9a-f]\{7,\}\).*|\1|p' "${kus}")
   bref=$(awk '/^[[:space:]]*ref:[[:space:]]*[0-9a-f]/ { print $2; exit }' "${bc}")
   [ -n "${kref}" ]
@@ -58,7 +59,7 @@ setup() {
 }
 
 @test "bgp-from-metadata job sets networkInterfaceClientID from metadata" {
-  job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
+  job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/azure/from-metadata-job.yaml"
   grep -q 'networkInterfaceClientId' "${job}"
   grep -q 'networkInterfaceClientID:' "${job}"
   grep -q 'AZURE_CLIENT_ID' "${job}"
@@ -66,8 +67,20 @@ setup() {
   grep -q 'wait_for "AZURE_CLIENT_ID on manager pods"' "${job}"
 }
 
+@test "bgp-from-metadata-gcp job reads virt metadata and platform GCP" {
+  job="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/gcp/from-metadata-job-gcp.yaml"
+  grep -q 'gcp-virt-platform-metadata' "${job}"
+  grep -q 'platform: GCP' "${job}"
+  grep -q 'cloudRouterName' "${job}"
+  grep -q 'ncc:' "${job}"
+  grep -q 'PROJECT_NUMBER' "${job}"
+  grep -q 'POOL_ID' "${job}"
+  grep -q 'SERVICE_ACCOUNT_EMAIL' "${job}"
+  grep -q 'bgp-cloud-connector-gcp-credentials' "${job}"
+}
+
 @test "metadata jobs use sync-wave not Sync hook" {
-  bgp="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/from-metadata-job.yaml"
+  bgp="${BATS_TEST_DIRNAME}/../../gitops/operators/bgp-cloud-connector/azure/from-metadata-job.yaml"
   trident="${BATS_TEST_DIRNAME}/../../gitops/operators/trident/from-metadata-job.yaml"
   grep -q 'sync-wave: "4"' "${bgp}"
   grep -q 'sync-wave: "4"' "${trident}"
@@ -91,6 +104,26 @@ setup() {
   grep -q 'virt-stack' "${script}"
   grep -q 'applications.argoproj.io' "${script}"
   ! grep -q 'mapfile' "${script}"
+}
+
+@test "trident-cleanup drains GCP Hyperdisk when Trident absent" {
+  script="${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  grep -q 'drain_gcp_hyperdisk' "${script}"
+  grep -q 'HyperConverged' "${script}"
+  grep -q 'sp-balanced-storage' "${script}"
+}
+
+@test "gcp cleanup skips Hyperdisk drain when the storage class is absent" {
+  export CLEANUP_PLATFORM=gcp
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping GCP Hyperdisk drain"* ]]
+}
+
+@test "installer kubeconfig defaults to osd-gcp config-virt" {
+  run bash -c 'export OSD_GCP_ROOT=/tmp/installer OSD_GCP_PROFILE=virt; source "'"${BATS_TEST_DIRNAME}"'/../../scripts/installer-kubeconfig.sh"; resolve_installer_kubeconfig /ignored'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "/tmp/installer/.kube/config-virt" ]]
 }
 
 @test "bootstrap selects the Classic overlay" {

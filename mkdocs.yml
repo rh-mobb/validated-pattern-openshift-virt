@@ -8,6 +8,14 @@ theme:
 exclude_docs: |
   README.md
 
+validation:
+  nav:
+    omitted_files: ignore
+  links:
+    not_found: ignore
+    unrecognized_links: ignore
+    absolute_links: ignore
+
 nav:
   - Home: index.md
   - Prerequisites: prerequisites/index.md

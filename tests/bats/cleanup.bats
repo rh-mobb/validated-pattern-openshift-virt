@@ -3,6 +3,7 @@ setup() {
   export PATH="${BATS_TEST_DIRNAME}/cleanup-bin:${PATH}"
   export CLEANUP_CALLS="${BATS_TEST_TMPDIR}/calls"
   export CLEANUP_SCENARIO=normal
+  unset OSD_GCP_ROOT CLEANUP_PLATFORM
 }
 @test "drain disables imports and waits before deleting storage" {
   run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"

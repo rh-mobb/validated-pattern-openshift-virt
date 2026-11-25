@@ -1,0 +1,12 @@
+# VM workloads on nested-lab pool; leave infra default (CNV control plane on cluster workers).
+apiVersion: hco.kubevirt.io/v1beta1
+kind: HyperConverged
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+spec:
+  workloads:
+    nodePlacement:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+        workload: nested-lab

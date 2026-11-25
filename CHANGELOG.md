@@ -4,6 +4,12 @@ Operator-visible history. Update **only at commit time** from `git diff --cached
 
 ## Unreleased
 
+### OSD GCP on the Classic and HCP baseline
+
+- Bootstrap keeps `GITOPS_PLATFORM` (`azure-classic` or `azure-hcp`) and `GITOPS_PATH`. An `osd-gcp` installer, or `GITOPS_OVERLAY=osd-gcp`, selects `gitops/overlays/osd-gcp` and the Hyperdisk metadata ConfigMap.
+- Azure cleanup stays the guarded ANF drain (`.anf-preview`, `.anf-cleanup`, empty-pool check before backend deletion). OSD GCP cleanup (`OSD_GCP_ROOT`, or installer `osd-gcp`) drains HyperConverged and Hyperdisk PVCs on `sp-balanced-storage`.
+- Azure plans succeed when `platform.json` has no GCP workload-identity pool. Classic `machine_api_client_id` still supplies the NIC client ID, with HCP `cluster_api_azure_client_id` as the fallback.
+
 ### Classic validation and HCP merge gates
 
 - Document operator API registration and a longer cold-start smoke deadline while retaining the continuous 120-second stability barriers.

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../core
+  - from-metadata-rbac.yaml
+  - from-metadata-job.yaml
+  # Temporary until openshift/bgp-cloud-connector#121 (see rh-mobb/validated-pattern-openshift-virt#9).
+  - azure-nic-ip-forwarding-ds.yaml
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: openshift-bgp-cloud-connector-controller-manager
+    path: wi-patch.yaml

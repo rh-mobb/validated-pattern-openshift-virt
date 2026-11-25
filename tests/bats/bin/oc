@@ -64,7 +64,7 @@ metadata:
 EOF
     ;;
   get)
-    if [[ "$*" == *"crd tridentbackendconfigs"* || "$*" == *"crd bgpcloudconfigurations"* ]]; then
+    if [[ "${1:-}" == "crd" && "$*" == *"--ignore-not-found"* ]]; then
       exit 0
     fi
     echo "mock oc get $*"

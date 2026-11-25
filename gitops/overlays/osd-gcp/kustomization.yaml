@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# RBAC is applied by scripts/gitops-bootstrap.sh before this overlay.
+resources:
+  - ../../operators/cnv
+  - ../../operators/bgp-cloud-connector/gcp
+  - ../../samples/cudn
+patches:
+  - path: hyperconverged-placement.yaml
+  - path: storageprofile-job-gcp.yaml
+    target:
+      group: batch
+      version: v1
+      kind: Job
+      name: cnv-storageprofile
+      namespace: openshift-cnv

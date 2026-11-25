@@ -128,12 +128,15 @@ Apply, destroy, and `trident-cleanup` must outlive the chat turn. A dead foregro
 ### Destroy
 
 1. Confirm subscription, RG, NetApp account, cluster name.
-2. Stop storage consumers and run `.anf-preview`. `make cluster.<name>.cleanup`
+2. Stop storage consumers and run `.anf-preview` on Azure. `make cluster.<name>.cleanup`
    removes Argo, disables common boot-image imports, waits for DataImportCrons, drains
    BGP and PVCs/PVs, then waits for an empty Azure pool before removing the backend.
    Direct leftover deletion requires `ANF_DELETE_CONFIRM=<rg>/<account>/<pool>`.
    `.anf-cleanup` is the Azure-only recovery target after a partial destroy; do not
    overlap it with another ARM mutation.
+   OSD GCP (`osd-gcp-virt`): set `OSD_GCP_ROOT`, or use a platform whose installer is
+   `osd-gcp`. Cleanup then drains HyperConverged and Hyperdisk PVCs on
+   `sp-balanced-storage`.
 3. `make cluster.<name>.destroy` runs that cleanup before Terraform removes the pool,
    subnet and identities. Errors stop the sequence.
 4. Then the installer `make cluster.<name>.destroy`.

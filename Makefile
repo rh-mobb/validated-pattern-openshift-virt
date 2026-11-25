@@ -6,6 +6,8 @@ SCRIPTS := $(ROOT_DIR)/scripts
 
 ARO_HCP_ROOT ?=
 ARO_HCP_PROFILE ?=
+OSD_GCP_ROOT ?=
+OSD_GCP_PROFILE ?=
 
 .PHONY: help fmt lint test docs-venv docs-preview docs-build gitops-test script-test cluster.%
 
@@ -13,7 +15,7 @@ help: ## Show targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-28s %s\n", $$1, $$2}'
 	@echo "Cluster operations: make cluster.<name>.<operation>"
 	@echo "  init plan apply destroy cleanup anf-preview anf-cleanup bootstrap stack-ready smoke"
-	@echo "Set ARO_HCP_ROOT to the installer checkout (aro-hcp or aro-classic) to refresh platform.json before apply."
+	@echo "Set ARO_HCP_ROOT (aro-hcp or aro-classic) or OSD_GCP_ROOT (OSD GCP) to refresh platform.json before apply."
 
 cluster.%:
 	@CLUSTER_PROFILE=$$(echo "$@" | cut -d'.' -f2); \
@@ -26,11 +28,14 @@ cluster.%:
 	fi; \
 	ARO_PROF="$(ARO_HCP_PROFILE)"; \
 	[ -n "$$ARO_PROF" ] || ARO_PROF=$$CLUSTER_PROFILE; \
-	$(MAKE) -f Makefile.cluster CLUSTER_PROFILE=$$CLUSTER_PROFILE ARO_HCP_ROOT="$(ARO_HCP_ROOT)" ARO_HCP_PROFILE="$$ARO_PROF" $$OPERATION
+	OSD_PROF="$(OSD_GCP_PROFILE)"; \
+	[ -n "$$OSD_PROF" ] || OSD_PROF=virt; \
+	$(MAKE) -f Makefile.cluster CLUSTER_PROFILE=$$CLUSTER_PROFILE ARO_HCP_ROOT="$(ARO_HCP_ROOT)" ARO_HCP_PROFILE="$$ARO_PROF" OSD_GCP_ROOT="$(OSD_GCP_ROOT)" OSD_GCP_PROFILE="$$OSD_PROF" $$OPERATION
 
 fmt: ## Format Terraform and shell
 	terraform -chdir=$(TF_DIR) fmt -recursive
 	terraform -chdir=$(ROOT_DIR)/modules/azure fmt
+	terraform -chdir=$(ROOT_DIR)/modules/gcp fmt
 	@command -v shfmt >/dev/null && shfmt -w -i 2 -ci -bn $(SCRIPTS) || echo "shfmt not installed; skipping"
 
 lint: ## Validate Terraform
@@ -38,6 +43,9 @@ lint: ## Validate Terraform
 	terraform -chdir=$(ROOT_DIR)/modules/azure validate
 	terraform -chdir=$(TF_DIR) init -backend=false -input=false
 	terraform -chdir=$(TF_DIR) validate
+	terraform -chdir=$(ROOT_DIR)/modules/gcp init -backend=false -input=false
+	terraform -chdir=$(ROOT_DIR)/modules/gcp validate
+	terraform -chdir=$(ROOT_DIR)/modules/gcp test
 	@command -v shellcheck >/dev/null && (cd $(SCRIPTS) && shellcheck --external-sources *.sh) || echo "shellcheck not installed; skipping"
 
 gitops-test: ## Render GitOps overlays and verify scheduling contracts

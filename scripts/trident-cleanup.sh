@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # Drain in-cluster resources while Trident and BGP identities still exist.
+# OSD GCP (CLEANUP_PLATFORM=gcp or OSD_GCP_ROOT) drains Hyperdisk when Trident is absent.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-KUBECONFIG_PATH="${KUBECONFIG_PATH:-${ROOT_DIR}/.kube/config}"
+# shellcheck source=installer-kubeconfig.sh
+source "${SCRIPT_DIR}/installer-kubeconfig.sh"
+KUBECONFIG_PATH="$(resolve_installer_kubeconfig "${ROOT_DIR}")"
 STORAGE_CLASS="${STORAGE_CLASS:-anf-virt}"
+GCP_STORAGE_CLASS="${GCP_STORAGE_CLASS:-sp-balanced-storage}"
 GITOPS_APP_NAMESPACE="${GITOPS_APP_NAMESPACE:-openshift-gitops}"
 GITOPS_APP_NAME="${GITOPS_APP_NAME:-virt-stack}"
+gcp_cleanup=0
+if [[ "${CLEANUP_PLATFORM:-}" == "gcp" || -n "${OSD_GCP_ROOT:-}" ]]; then
+  gcp_cleanup=1
+fi
 log() { printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 die() {
   log "ERROR: $*"
@@ -17,6 +25,7 @@ case "${1:-}" in
     echo 'Usage: trident-cleanup.sh [--backend-only]'
     echo 'Drain GitOps, imports, BGP and PVCs/PVs. Stop consumers first.'
     echo 'make cluster.<profile>.cleanup also verifies the Azure pool is empty before removing the backend.'
+    echo 'OSD GCP (CLEANUP_PLATFORM=gcp or OSD_GCP_ROOT): when Trident is absent, drain Hyperdisk PVCs on sp-balanced-storage.'
     exit 0
     ;;
   '' | --backend-only) ;;
@@ -27,6 +36,46 @@ command -v jq >/dev/null || die 'jq is required'
 export KUBECONFIG="${KUBECONFIG_PATH}"
 oc whoami >/dev/null || die 'Cannot reach the API. Set KUBECONFIG_PATH.'
 # NotFound is the only absence we tolerate; authorization/transport failures stop teardown.
+
+drain_gcp_hyperdisk() {
+  local sc_ref
+  sc_ref="$(oc get storageclass "${GCP_STORAGE_CLASS}" --ignore-not-found -o name)"
+  if [[ "${sc_ref}" != "storageclass.storage.k8s.io/${GCP_STORAGE_CLASS}" ]]; then
+    log "StorageClass ${GCP_STORAGE_CLASS} absent; skipping GCP Hyperdisk drain"
+    return 0
+  fi
+
+  local found hco
+  found="$(oc get crd hyperconvergeds.hco.kubevirt.io --ignore-not-found -o name)"
+  if [[ -n "${found}" ]]; then
+    hco="$(oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv --ignore-not-found -o name)"
+    if [[ -n "${hco}" ]]; then
+      log "Deleting HyperConverged (stops CDI from recreating image PVCs on the Hyperdisk pool)"
+      oc -n openshift-cnv delete hyperconverged kubevirt-hyperconverged --ignore-not-found --wait=false
+    fi
+    oc -n openshift-cnv delete subscription kubevirt-hyperconverged --ignore-not-found --wait=false
+    sleep 15
+  fi
+
+  log "Deleting PVCs that use StorageClass ${GCP_STORAGE_CLASS}"
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    local ns name
+    ns="${line%% *}"
+    name="${line##* }"
+    log "Deleting pvc/${name} in ${ns}"
+    oc -n "${ns}" delete pvc "${name}" --ignore-not-found --wait=true --timeout=180s
+  done < <(oc get pvc -A -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${GCP_STORAGE_CLASS}"'")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}')
+
+  log "Deleting PVs still bound to ${GCP_STORAGE_CLASS}"
+  while IFS= read -r pv; do
+    [[ -z "${pv}" ]] && continue
+    log "Deleting pv/${pv}"
+    oc delete pv "${pv}" --ignore-not-found --wait=true --timeout=180s
+  done < <(oc get pv -o jsonpath='{range .items[?(@.spec.storageClassName=="'"${GCP_STORAGE_CLASS}"'")]}{.metadata.name}{"\n"}{end}')
+  log "GCP Hyperdisk drain finished; pool must have disk_count=0 before terraform destroy."
+}
+
 if [[ "${1:-}" == --backend-only ]]; then
   found="$(oc get crd tridentbackendconfigs.trident.netapp.io --ignore-not-found -o name)"
   if [[ -n "$found" ]]; then
@@ -61,6 +110,11 @@ else
 fi
 found="$(oc get crd tridentbackendconfigs.trident.netapp.io --ignore-not-found -o name)"
 if [[ -z "$found" ]]; then
+  if [[ "${gcp_cleanup}" == "1" ]]; then
+    drain_gcp_hyperdisk
+    log "Cleanup finished."
+    exit 0
+  fi
   log 'Trident CRDs absent; nothing to drain'
   exit 0
 fi
