@@ -49,7 +49,9 @@ locals {
 
 check "router_interface_ip_count" {
   assert {
-    condition     = !var.enable_bgp || var.router_interface_private_ips == null || length(var.router_interface_private_ips) == 2
+    condition = !var.enable_bgp ? true : (
+      var.router_interface_private_ips == null ? true : length(var.router_interface_private_ips) == 2
+    )
     error_message = "router_interface_private_ips must be null or have exactly 2 elements."
   }
 }

@@ -1,9 +1,13 @@
 mock_provider "google" {
-  alias = "google"
+  alias = "mock"
 }
 
 run "storage_without_bgp" {
   command = plan
+
+  providers = {
+    google = google.mock
+  }
 
   variables {
     cluster_name          = "virt-lab"
