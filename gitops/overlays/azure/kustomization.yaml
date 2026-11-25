@@ -1,4 +1,5 @@
+# Compatibility path for existing HCP Applications.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../base
+  - ../azure-hcp

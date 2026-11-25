@@ -15,7 +15,7 @@ ARO_HCP_PROFILE ?= $(CLUSTER_PROFILE)
 OSD_GCP_ROOT ?=
 OSD_GCP_PROFILE ?= virt
 
-.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform
+.PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform anf-preview anf-cleanup stack-ready smoke
 
 check-tfvars:
 	@test -f "$(TFVARS)" || (echo "Missing $(TFVARS)" >&2; exit 1)
@@ -37,23 +37,47 @@ plan: init refresh-platform
 apply: init refresh-platform
 	terraform -chdir=$(TF_DIR) apply -auto-approve -var-file="$(TFVARS)"
 
-cleanup:
+anf-preview: init
+	python3 $(SCRIPTS)/anf-volume-cleanup.py
+
+anf-cleanup: init
+	python3 $(SCRIPTS)/anf-volume-cleanup.py --apply
+
+cleanup: init
 	@set -euo pipefail; \
-	# shellcheck source=installer-kubeconfig.sh
 	. "$(SCRIPTS)/installer-kubeconfig.sh"; \
 	export KUBECONFIG_PATH="$$(resolve_installer_kubeconfig "$(ROOT_DIR)")"; \
 	export KUBECONFIG="$$KUBECONFIG_PATH"; \
-	export OSD_GCP_ROOT="$(OSD_GCP_ROOT)" OSD_GCP_PROFILE="$(OSD_GCP_PROFILE)"; \
-	bash $(SCRIPTS)/trident-cleanup.sh
+	export OSD_GCP_ROOT="$(OSD_GCP_ROOT)"; \
+	export OSD_GCP_PROFILE="$(OSD_GCP_PROFILE)"; \
+	installer="$$(terraform -chdir="$(TF_DIR)" output -raw installer 2>/dev/null || true)"; \
+	if [[ "$$installer" == "osd-gcp" || -n "$$OSD_GCP_ROOT" ]]; then \
+	  CLEANUP_PLATFORM=gcp bash $(SCRIPTS)/trident-cleanup.sh; \
+	else \
+	  python3 $(SCRIPTS)/anf-volume-cleanup.py --drain; \
+	fi
 
-destroy: init cleanup
+destroy: cleanup
 	terraform -chdir=$(TF_DIR) destroy -auto-approve -var-file="$(TFVARS)"
 
 bootstrap:
 	@set -euo pipefail; \
-	# shellcheck source=installer-kubeconfig.sh
 	. "$(SCRIPTS)/installer-kubeconfig.sh"; \
 	export TFVARS="$(TFVARS)"; \
 	export KUBECONFIG_PATH="$$(resolve_installer_kubeconfig "$(ROOT_DIR)")"; \
 	export KUBECONFIG="$$KUBECONFIG_PATH"; \
+	export OSD_GCP_ROOT="$(OSD_GCP_ROOT)"; \
+	export OSD_GCP_PROFILE="$(OSD_GCP_PROFILE)"; \
+	export ARO_HCP_ROOT="$(ARO_HCP_ROOT)"; \
 	bash $(SCRIPTS)/gitops-bootstrap.sh
+
+# Both targets use the installer's KUBECONFIG_PATH; they do not run Terraform.
+SMOKE_STABLE_SECONDS ?= 120
+SMOKE_TIMEOUT_SECONDS ?= 1800
+SMOKE_BOOT_SOURCE ?= both
+
+stack-ready:
+	python3 $(SCRIPTS)/virt-smoke.py --ready-only --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"
+
+smoke:
+	python3 $(SCRIPTS)/virt-smoke.py --stable-seconds $(SMOKE_STABLE_SECONDS) --timeout $(SMOKE_TIMEOUT_SECONDS) --boot-source $(SMOKE_BOOT_SOURCE) --output-dir "$(CLUSTER_DIR)/logs/virt-smoke"

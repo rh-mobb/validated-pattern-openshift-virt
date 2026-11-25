@@ -10,7 +10,7 @@ module "azure" {
   route_server_subnet_prefix  = try(local.platform.network.reserved.route_server_subnet_prefix, "")
   bgp_router_pool_names       = local.bgp_router_pool_names
   oidc_issuer_url             = local.platform.oidc_issuer_url
-  network_interface_client_id = try(local.platform.cluster_api_azure_client_id, "")
+  network_interface_client_id = local.network_interface_client_id
   pool_size_tib               = var.pool_size_tib
   custom_throughput_mibps     = var.custom_throughput_mibps
   tags                        = var.tags

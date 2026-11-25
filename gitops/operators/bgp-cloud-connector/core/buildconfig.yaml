@@ -33,5 +33,3 @@ spec:
   failedBuildsHistoryLimit: 3
   triggers:
     - type: ConfigChange
-    - type: ImageChange
-      imageChange: {}

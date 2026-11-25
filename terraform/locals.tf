@@ -12,10 +12,19 @@ locals {
     if tostring(try(p.labels["bgp_router"], "")) == "true"
   ]
 
-  # Prefer explicit virt_storage_zone in platform.json; else first labeled pool zone; else region-a.
+  # Classic machine-api, then HCP cluster-api-azure. Empty fails the Azure BGP precondition.
+  network_interface_client_id = (
+    trimspace(try(local.platform.machine_api_client_id, "")) != "" ?
+    trimspace(try(local.platform.machine_api_client_id, "")) :
+    trimspace(try(local.platform.cluster_api_azure_client_id, ""))
+  )
+
+  # Prefer explicit virt_storage_zone in platform.json; else override; else region-a.
+  # try() keeps Azure platform.json without gcp_region from failing plan.
   gcp_storage_zone = coalesce(
     try(local.platform.virt_storage_zone, null),
     var.gcp_storage_zone_override != "" ? var.gcp_storage_zone_override : null,
-    "${local.platform.gcp_region}-a",
+    try("${local.platform.gcp_region}-a", null),
+    "unspecified",
   )
 }

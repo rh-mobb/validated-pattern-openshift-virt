@@ -7,7 +7,7 @@
 # that unless enableIPForwarding is true. Do not add bgp_router=true just to
 # get this flag — that creates Route Server peers (16 max).
 #
-# Uses the operator SA so Azure WI can exchange as installer cluster-api-azure
+# Uses the operator SA so Azure WI can exchange as installer NIC identity
 # (networkInterfaceClientID). Customer principals cannot patch managed-RG NICs.
 apiVersion: apps/v1
 kind: DaemonSet
@@ -39,6 +39,7 @@ spec:
       priorityClassName: system-node-critical
       nodeSelector:
         kubernetes.io/os: linux
+        node-role.kubernetes.io/worker: ""
       tolerations:
         - operator: Exists
       volumes:
@@ -50,7 +51,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             # WI webhook may append AZURE_CLIENT_ID from the SA (BGP MI).
-            # Login as cluster-api-azure; that federated cred is on this SA.
+            # Login as the installer NIC identity; that federated cred is on this SA.
             - name: CAPI_CLIENT_ID
               valueFrom:
                 configMapKeyRef:

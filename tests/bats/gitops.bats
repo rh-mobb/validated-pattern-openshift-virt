@@ -5,6 +5,7 @@ setup() {
   export GITOPS_DRY_RUN=1
   export TF_DATA_DIR="${BATS_TEST_DIRNAME}/tmp"
   mkdir -p "${BATS_TEST_DIRNAME}/tmp"
+  unset GITOPS_PLATFORM GITOPS_PATH GITOPS_OVERLAY GITOPS_REVISION OSD_GCP_ROOT CLEANUP_PLATFORM
 }
 
 @test "gitops dry-run includes trident-operator subscription" {
@@ -112,8 +113,49 @@ setup() {
   grep -q 'sp-balanced-storage' "${script}"
 }
 
+@test "gcp cleanup skips Hyperdisk drain when the storage class is absent" {
+  export CLEANUP_PLATFORM=gcp
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/trident-cleanup.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping GCP Hyperdisk drain"* ]]
+}
+
 @test "installer kubeconfig defaults to osd-gcp config-virt" {
   run bash -c 'export OSD_GCP_ROOT=/tmp/installer OSD_GCP_PROFILE=virt; source "'"${BATS_TEST_DIRNAME}"'/../../scripts/installer-kubeconfig.sh"; resolve_installer_kubeconfig /ignored'
   [ "$status" -eq 0 ]
   [[ "$output" == "/tmp/installer/.kube/config-virt" ]]
+}
+
+@test "bootstrap selects the Classic overlay" {
+  export GITOPS_PLATFORM=classic
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/overlays/azure-classic"* ]]
+}
+
+@test "bootstrap defaults to HCP for existing callers" {
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/overlays/azure-hcp"* ]]
+}
+
+@test "bootstrap accepts a committed profile path" {
+  export GITOPS_PATH=gitops/profiles/aro-classic-virt
+  export GITOPS_REVISION=feat/classic-gitops-overlays
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path: gitops/profiles/aro-classic-virt"* ]]
+  [[ "$output" == *"targetRevision: feat/classic-gitops-overlays"* ]]
+}
+
+@test "bootstrap rejects an unknown platform before touching the cluster" {
+  export GITOPS_PLATFORM=typo
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "bootstrap rejects paths outside the checkout" {
+  export GITOPS_PATH=../other-repo
+  run bash "${BATS_TEST_DIRNAME}/../../scripts/gitops-bootstrap.sh"
+  [ "$status" -ne 0 ]
 }

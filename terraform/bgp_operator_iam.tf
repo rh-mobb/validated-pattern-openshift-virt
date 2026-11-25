@@ -7,12 +7,13 @@ locals {
     : null
   )
 
-  wif_pool_id = coalesce(
+  # Null on Azure platform.json (no WIF). The IAM module is created only for OSD GCP.
+  wif_pool_id = try(coalesce(
     try(local.platform.wif_config_id, null),
     length(regexall("workloadIdentityPools/([^/]+)/", local.wif_provider_resource)) > 0
     ? regex("workloadIdentityPools/([^/]+)/", local.wif_provider_resource)[0]
     : null,
-  )
+  ), null)
 
   wif_provider_id = (
     length(regexall("providers/([^/]+)$", local.wif_provider_resource)) > 0
@@ -50,7 +51,7 @@ module "gcp_bgp_operator_iam" {
   count  = local.is_osd_gcp && var.gcp_enable_bgp ? 1 : 0
   source = "../modules/gcp-bgp-operator-iam"
 
-  project_id                       = local.platform.gcp_project_id
+  project_id                       = try(local.platform.gcp_project_id, "")
   project_number_for_wif_principal = local.gcp_project_number
   workload_identity_pool_id        = local.wif_pool_id
   workload_identity_provider_id    = local.wif_provider_id

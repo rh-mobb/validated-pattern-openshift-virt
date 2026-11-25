@@ -61,8 +61,8 @@ output "bgp_client_id" {
 }
 
 output "network_interface_client_id" {
-  description = "Installer cluster-api-azure client ID for BGPCloudConfiguration networkInterfaceClientID."
-  value       = try(local.platform.cluster_api_azure_client_id, "")
+  description = "Installer NIC identity for BGPCloudConfiguration networkInterfaceClientID (HCP cluster-api-azure or Classic machine-api)."
+  value       = local.network_interface_client_id
 }
 
 # --- GCP (module.gcp[0]) ---

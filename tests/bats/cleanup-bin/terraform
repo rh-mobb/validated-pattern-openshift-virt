@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+import json,os,sys
+args=sys.argv[1:]
+with open(os.environ['CLEANUP_CALLS'],'a') as f:f.write('terraform '+' '.join(args)+'\n')
+if 'output' in args:
+ print(json.dumps({k:{'value':v} for k,v in {'subscription_id':'00000000-0000-0000-0000-000000000004','resource_group_name':'test-rg','netapp_account_name':'test-anf','capacity_pool_name':'test-pool'}.items()}))
+
+if args[-2:]==['state','pull']:
+ resources=[] if os.environ['CLEANUP_SCENARIO']=='pool_removed' else [{'module':'module.azure','mode':'managed','type':'azurerm_netapp_pool','name':'this','instances':[{'attributes':{'id':'/subscriptions/00000000-0000-0000-0000-000000000004/resourceGroups/test-rg/providers/Microsoft.NetApp/netAppAccounts/test-anf/capacityPools/test-pool'}}]}]
+ print(json.dumps({'version':4,'resources':resources,'outputs':{}}))

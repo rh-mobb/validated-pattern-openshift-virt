@@ -3,8 +3,8 @@ module "gcp" {
   source = "../modules/gcp"
 
   cluster_name                              = local.platform.cluster_name
-  gcp_project_id                            = local.platform.gcp_project_id
-  gcp_region                                = local.platform.gcp_region
+  gcp_project_id                            = try(local.platform.gcp_project_id, "")
+  gcp_region                                = try(local.platform.gcp_region, "")
   storage_zone                              = local.gcp_storage_zone
   storage_pool_name                         = var.gcp_storage_pool_name
   storage_class_name                        = var.gcp_storage_class_name
