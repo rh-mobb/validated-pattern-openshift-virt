@@ -1,0 +1,21 @@
+locals {
+  platform = jsondecode(file(var.platform_json))
+
+  is_osd_gcp = try(local.platform.installer, "") == "osd-gcp"
+
+  _node_pools = merge(
+    try(local.platform.node_pools, {}),
+    try(local.platform.machine_pools, {}),
+  )
+  bgp_router_pool_names = [
+    for name, p in local._node_pools : name
+    if tostring(try(p.labels["bgp_router"], "")) == "true"
+  ]
+
+  # Prefer explicit virt_storage_zone in platform.json; else first labeled pool zone; else region-a.
+  gcp_storage_zone = coalesce(
+    try(local.platform.virt_storage_zone, null),
+    var.gcp_storage_zone_override != "" ? var.gcp_storage_zone_override : null,
+    "${local.platform.gcp_region}-a",
+  )
+}

@@ -1,0 +1,97 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bgp-from-metadata
+  namespace: openshift-bgp-cloud-connector
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Replace=true
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 12
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: bgp-from-metadata
+      containers:
+        - name: apply
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              wait_for() {
+                local desc="$1"; shift
+                local i
+                for i in $(seq 1 90); do
+                  if "$@" >/dev/null 2>&1; then return 0; fi
+                  sleep 10
+                done
+                echo "timed out waiting for ${desc}" >&2
+                exit 1
+              }
+              wait_for "gcp-virt-platform-metadata" oc -n openshift-gitops get configmap gcp-virt-platform-metadata
+              PROJECT="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.gcpProjectId}')"
+              REGION="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.gcpRegion}')"
+              ROUTER="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.cloudRouterName}')"
+              HUB="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.nccHubName}')"
+              PREFIX="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.nccSpokePrefix}')"
+              ASN="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.bgpLocalAsn}')"
+              SELECTOR_KEY="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.bgpRouterNodeSelectorKey}')"
+              SELECTOR_VAL="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.bgpRouterNodeSelectorValue}')"
+              PROJECT_NUMBER="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.gcpProjectNumber}')"
+              POOL_ID="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.wifPoolId}')"
+              PROVIDER_ID="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.wifProviderId}')"
+              SA_EMAIL="$(oc -n openshift-gitops get configmap gcp-virt-platform-metadata -o jsonpath='{.data.bgpGcpServiceAccountEmail}')"
+              [[ -n "${ASN}" ]] || ASN="65001"
+              [[ -n "${SELECTOR_KEY}" ]] || SELECTOR_KEY="workload"
+              [[ -n "${SELECTOR_VAL}" ]] || SELECTOR_VAL="nested-lab"
+              [[ -n "${PROVIDER_ID}" ]] || PROVIDER_ID="oidc"
+              if [[ -z "${ROUTER}" || -z "${HUB}" ]]; then
+                echo "BGP cloud router / NCC hub not in gcp-virt-platform-metadata; operator BuildConfig only — set gcp_bgp_* tfvars and re-bootstrap when cloud BGP exists" >&2
+                exit 0
+              fi
+              [[ -n "${PROJECT}" && -n "${REGION}" && -n "${PREFIX}" ]] || {
+                echo "incomplete gcp-virt-platform-metadata for BGP" >&2
+                exit 1
+              }
+              [[ -n "${PROJECT_NUMBER}" && -n "${POOL_ID}" && -n "${SA_EMAIL}" ]] || {
+                echo "incomplete WIF metadata (run virt-stack apply for gcp_bgp_operator_iam, then re-bootstrap)" >&2
+                exit 1
+              }
+              DEPLOY=openshift-bgp-cloud-connector-controller-manager
+              wait_for "BGPCloudConfiguration CRD" oc get crd bgpcloudconfigurations.networking.openshift.io
+              wait_for "BGPCloudConfiguration CRD Established" oc wait --for=condition=Established crd/bgpcloudconfigurations.networking.openshift.io --timeout=120s
+              wait_for "bgp-cloud-connector Deployment" oc -n openshift-bgp-cloud-connector get deployment "${DEPLOY}"
+              oc -n openshift-bgp-cloud-connector set env "deployment/${DEPLOY}" \
+                PROJECT_NUMBER="${PROJECT_NUMBER}" \
+                POOL_ID="${POOL_ID}" \
+                PROVIDER_ID="${PROVIDER_ID}" \
+                SERVICE_ACCOUNT_EMAIL="${SA_EMAIL}"
+              echo "restarting ${DEPLOY} so operator picks up WIF env for CCO" >&2
+              oc -n openshift-bgp-cloud-connector rollout restart "deployment/${DEPLOY}"
+              wait_for "WIF env on manager pods" bash -c 'pod="$(oc -n openshift-bgp-cloud-connector get pods -l control-plane=controller-manager -o jsonpath="{.items[0].metadata.name}" 2>/dev/null)"; [[ -n "${pod}" ]] && oc -n openshift-bgp-cloud-connector get pod "${pod}" -o jsonpath="{.spec.containers[0].env[*].name}" | grep -q SERVICE_ACCOUNT_EMAIL'
+              wait_for "CCO secret bgp-cloud-connector-gcp-credentials" oc -n openshift-bgp-cloud-connector get secret bgp-cloud-connector-gcp-credentials
+              oc apply -f - <<EOF
+              apiVersion: networking.openshift.io/v1beta1
+              kind: BGPCloudConfiguration
+              metadata:
+                name: cluster
+              spec:
+                platform: GCP
+                bgp:
+                  localASN: ${ASN}
+                  livenessDetection: bgp-keepalive
+                routerNodeSelector:
+                  ${SELECTOR_KEY}: "${SELECTOR_VAL}"
+                gcp:
+                  project: "${PROJECT}"
+                  region: "${REGION}"
+                  cloudRouterName: "${ROUTER}"
+                  ncc:
+                    hubName: "${HUB}"
+                    spokePrefix: "${PREFIX}"
+                  enableNestedVirtualization: true
+              EOF

@@ -12,6 +12,8 @@ export TF_DATA_DIR := $(abspath $(CLUSTER_DIR)/.terraform)
 unexport CLUSTER_NAME
 ARO_HCP_ROOT ?=
 ARO_HCP_PROFILE ?= $(CLUSTER_PROFILE)
+OSD_GCP_ROOT ?=
+OSD_GCP_PROFILE ?= virt
 
 .PHONY: check-tfvars init plan apply destroy cleanup bootstrap refresh-platform
 
@@ -21,6 +23,8 @@ check-tfvars:
 refresh-platform:
 	@if [ -n "$(ARO_HCP_ROOT)" ]; then \
 		$(MAKE) -C "$(ARO_HCP_ROOT)" cluster.$(ARO_HCP_PROFILE).platform; \
+	elif [ -n "$(OSD_GCP_ROOT)" ]; then \
+		$(MAKE) -C "$(OSD_GCP_ROOT)" cluster.$(OSD_GCP_PROFILE).platform; \
 	fi
 
 init: check-tfvars
@@ -34,11 +38,22 @@ apply: init refresh-platform
 	terraform -chdir=$(TF_DIR) apply -auto-approve -var-file="$(TFVARS)"
 
 cleanup:
+	@set -euo pipefail; \
+	# shellcheck source=installer-kubeconfig.sh
+	. "$(SCRIPTS)/installer-kubeconfig.sh"; \
+	export KUBECONFIG_PATH="$$(resolve_installer_kubeconfig "$(ROOT_DIR)")"; \
+	export KUBECONFIG="$$KUBECONFIG_PATH"; \
+	export OSD_GCP_ROOT="$(OSD_GCP_ROOT)" OSD_GCP_PROFILE="$(OSD_GCP_PROFILE)"; \
 	bash $(SCRIPTS)/trident-cleanup.sh
 
 destroy: init cleanup
 	terraform -chdir=$(TF_DIR) destroy -auto-approve -var-file="$(TFVARS)"
 
 bootstrap:
-	@export TFVARS="$(TFVARS)"; \
+	@set -euo pipefail; \
+	# shellcheck source=installer-kubeconfig.sh
+	. "$(SCRIPTS)/installer-kubeconfig.sh"; \
+	export TFVARS="$(TFVARS)"; \
+	export KUBECONFIG_PATH="$$(resolve_installer_kubeconfig "$(ROOT_DIR)")"; \
+	export KUBECONFIG="$$KUBECONFIG_PATH"; \
 	bash $(SCRIPTS)/gitops-bootstrap.sh

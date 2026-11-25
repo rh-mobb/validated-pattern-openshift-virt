@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cnv-storageprofile
+  namespace: openshift-cnv
+spec:
+  template:
+    spec:
+      containers:
+        - name: patch
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+              SC="${STORAGE_CLASS_NAME:-sp-balanced-storage}"
+              wait_for() {
+                local desc="$1"; shift
+                local i
+                for i in $(seq 1 180); do
+                  if "$@" >/dev/null 2>&1; then return 0; fi
+                  sleep 10
+                done
+                echo "timed out waiting for ${desc}" >&2
+                exit 1
+              }
+              wait_for "HyperConverged CRD" oc get crd hyperconvergeds.hco.kubevirt.io
+              wait_for "HyperConverged Available" oc wait -n openshift-cnv hyperconverged/kubevirt-hyperconverged --for=condition=Available --timeout=1s
+              wait_for "StorageProfile CRD" oc get crd storageprofiles.cdi.kubevirt.io
+              wait_for "StorageProfile ${SC}" oc get storageprofile "${SC}"
+              oc patch storageprofile "${SC}" --type=json -p='[{"op":"replace","path":"/spec/claimPropertySets","value":[{"accessModes":["ReadWriteMany"],"volumeMode":"Filesystem"}]}]'
+              echo "patched storageprofile/${SC} claimPropertySets RWX Filesystem"
+          env:
+            - name: STORAGE_CLASS_NAME
+              value: sp-balanced-storage
